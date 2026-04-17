@@ -2,6 +2,7 @@ English | [한국어](README.ko.md)
 
 # LAO macOS App
 
+![Build](https://github.com/naka98/LAO/actions/workflows/build.yml/badge.svg)
 ![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue)
 ![Swift](https://img.shields.io/badge/Swift-6.0-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
