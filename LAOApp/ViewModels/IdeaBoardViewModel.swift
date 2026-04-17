@@ -2,6 +2,14 @@ import Foundation
 import LAODomain
 import LAOServices
 
+/// Identifiable error payload surfaced via SwiftUI `.alert(...)`. Replaces the
+/// previous global top-banner approach for local CRUD failures.
+struct ErrorAlert: Identifiable {
+    let id = UUID()
+    let title: String
+    let detail: String
+}
+
 @Observable @MainActor
 final class IdeaBoardViewModel {
     let container: AppContainer
@@ -12,6 +20,7 @@ final class IdeaBoardViewModel {
     var searchText = ""
     var statusFilter: IdeaStatus? = nil
     var requestMetrics: [UUID: (calls: Int, tokens: Int)] = [:]
+    var errorAlert: ErrorAlert?
 
     init(container: AppContainer, projectId: UUID) {
         self.container = container
@@ -78,7 +87,8 @@ final class IdeaBoardViewModel {
             ideas.insert(created, at: 0)
             return created
         } catch {
-            container.bannerState.show(.critical("Failed to create idea", message: error.localizedDescription))
+            let lang = AppLanguage.currentStrings
+            errorAlert = ErrorAlert(title: lang.ideaBoard.createFailed, detail: error.localizedDescription)
             return nil
         }
     }
@@ -88,7 +98,8 @@ final class IdeaBoardViewModel {
             try await container.ideaService.deleteIdea(id: id)
             ideas.removeAll { $0.id == id }
         } catch {
-            container.bannerState.show(.critical("Failed to delete idea", message: error.localizedDescription))
+            let lang = AppLanguage.currentStrings
+            errorAlert = ErrorAlert(title: lang.ideaBoard.deleteFailed, detail: error.localizedDescription)
         }
     }
 }

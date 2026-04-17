@@ -18,7 +18,6 @@ struct AppContainer {
     let modelCatalog: ModelCatalogService
 
     let appSettingsService: AppSettingsService
-    let bannerState: AppBannerState
 
     // v5 services
     let boardService: BoardService
@@ -77,7 +76,6 @@ struct AppContainer {
                 skillSeeder: skillSeeder,
                 modelCatalog: modelCatalog,
                 appSettingsService: appSettingsService,
-                bannerState: AppBannerState(),
                 boardService: boardService,
                 projectAgentMembershipService: projectAgentMembershipService,
                 designSessionService: designSessionService,

@@ -66,10 +66,6 @@ final class DesignWorkflowViewModel {
     var relationshipsStatus: SubtaskStatus = .idle
     var uncertaintiesStatus: SubtaskStatus = .idle
 
-    /// Number of items whose elaboration was interrupted by app termination
-    /// and reset to pending during restoration. Set by restoreFullWorkflow().
-    var interruptedElaborationCount: Int = 0
-
     /// Cached user profile for client context injection into prompts.
     private var userProfile = UserProfile()
 
@@ -205,6 +201,10 @@ final class DesignWorkflowViewModel {
     /// and parent re-renders. Replaces the previous view-owned Task pattern that
     /// silently broke the auto-chain when the overlay view was rebuilt.
     private var autoFinishTask: Task<Void, Never>?
+
+    /// Tracks the active finishWorkflow Task so cancellation (Cancel button or Back navigation)
+    /// can actually reach the in-flight LLM call started by confirmFinishApproval.
+    private var finishingTask: Task<Void, Never>?
 
     // Consistency review overlay state
     var consistencyIssues: [ConsistencyIssue] = []
@@ -441,14 +441,12 @@ final class DesignWorkflowViewModel {
         }
         var restoredWorkflow = restoredResult
 
-        // Edge case: revert inProgress items to pending (streaming was interrupted)
-        var interruptedCount = 0
+        // Edge case: revert inProgress items to pending (streaming was interrupted).
+        // Partial output is preserved as plannerNotes so the user can recover context.
         for si in restoredWorkflow.deliverables.indices {
             for ii in restoredWorkflow.deliverables[si].items.indices {
                 if restoredWorkflow.deliverables[si].items[ii].status == .inProgress {
-                    interruptedCount += 1
                     restoredWorkflow.deliverables[si].items[ii].status = .pending
-                    // Preserve partial output as planner note for context
                     if let partial = restoredWorkflow.deliverables[si].items[ii].partialOutput, !partial.isEmpty {
                         let existing = restoredWorkflow.deliverables[si].items[ii].plannerNotes ?? ""
                         restoredWorkflow.deliverables[si].items[ii].plannerNotes =
@@ -461,7 +459,6 @@ final class DesignWorkflowViewModel {
                 }
             }
         }
-        interruptedElaborationCount = interruptedCount
 
         // Edge case: revert inProgress steps to pending
         for i in restoredWorkflow.steps.indices {
@@ -853,12 +850,50 @@ final class DesignWorkflowViewModel {
     /// User confirms finish approval — closes overlay and starts consistency check + export.
     func confirmFinishApproval() {
         showFinishApproval = false
-        Task { await finishWorkflow() }
+        finishingTask?.cancel()
+        finishingTask = Task { await finishWorkflow() }
     }
 
     /// User cancels finish approval from the confirmation overlay.
     func cancelFinishApproval() {
         showFinishApproval = false
+    }
+
+    // MARK: - Finishing Cancellation (consistencyCheck step only)
+
+    /// Cancel an in-flight finishWorkflow that is still in the consistencyCheck step.
+    /// Safe only for consistencyCheck — applyingFixes/exporting cannot be safely cancelled
+    /// (partial action dispatch / file write risk).
+    func cancelFinishingConsistencyCheck() {
+        guard finishingStep == .consistencyCheck else {
+            logger.notice("cancelFinishingConsistencyCheck blocked — current step is \(self.finishingStep?.rawValue ?? "nil", privacy: .public)")
+            return
+        }
+        autoFinishTask?.cancel()
+        consistencyReviewTask?.cancel()
+        finishingTask?.cancel()
+        finishingStep = nil
+        logger.info("finishWorkflow consistency check cancelled by user")
+    }
+
+    // MARK: - Consistency Review Cancellation
+
+    /// Reset all consistency review state. Called when the user closes the overlay
+    /// without approving fixes (X / ESC / Cancel / Back). Forces a clean slate so the
+    /// next finish attempt creates fresh issues rather than showing stale chat.
+    func cancelConsistencyReview() {
+        consistencyReviewTask?.cancel()
+        consistencyIssues = []
+        consistencySummary = ""
+        consistencyChatMessages = []
+        consistencyStreamOutput = ""
+        isConsistencyChatting = false
+        pendingConsistencyActions = nil
+        isConsistencyApplying = false
+        isConsistencyElaborating = false
+        consistencyReviewCompleted = false
+        showConsistencyReview = false
+        logger.info("Consistency review cancelled — state reset")
     }
 
     // MARK: - Skeleton Generation (Stage 2: Structure → Graph → Canvas)

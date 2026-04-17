@@ -27,8 +27,6 @@ struct DesignWorkflowView: View {
     @State var showUncertaintyDiscussOverlay = false
     @State var discussingUncertaintyId: UUID?
     @State var showElaborationProgressOverlay = false
-    // Elaboration complete banner removed — ElaborationProgressOverlay handles completion
-    @State var showInterruptedBanner = false
     @State var showDocumentOverlay = false
     @State var documentOverlayItems: [DesignDocumentItem] = []
 
@@ -64,7 +62,7 @@ struct DesignWorkflowView: View {
                     vm: vm,
                     onDismiss: {
                         withAnimation(.easeInOut(duration: 0.2)) {
-                            vm.showConsistencyReview = false
+                            vm.cancelConsistencyReview()
                         }
                     },
                     onExport: {
@@ -214,16 +212,16 @@ struct DesignWorkflowView: View {
                 withAnimation(.easeInOut(duration: 0.2)) { showElaborationProgressOverlay = false }
             }
         }
-        .onChange(of: vm.interruptedElaborationCount) { _, count in
-            if count > 0 {
-                withAnimation(.easeInOut(duration: 0.3)) { showInterruptedBanner = true }
-                Task {
-                    try? await Task.sleep(for: .seconds(8))
-                    withAnimation(.easeInOut(duration: 0.3)) { showInterruptedBanner = false }
-                }
+        .onDisappear {
+            // Back navigation while consistency check is running: cancel the LLM call
+            // so it doesn't keep burning tokens invisibly. User resumes via the
+            // header "Export" button after re-entering.
+            if vm.finishingStep == .consistencyCheck {
+                vm.cancelFinishingConsistencyCheck()
             }
+            let ref = vm
+            Task { await ref.flushSync() }
         }
-        .onDisappear { let ref = vm; Task { await ref.flushSync() } }
     }
 
     // MARK: - Header
@@ -530,27 +528,6 @@ struct DesignWorkflowView: View {
                         .frame(width: 300)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
-            }
-        }
-        .overlay(alignment: .top) {
-            if showInterruptedBanner {
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(theme.warningAccent)
-                    Text(lang.design.elaborationInterrupted(vm.interruptedElaborationCount))
-                        .font(AppTheme.Typography.bodySecondary.weight(.medium))
-                    Spacer()
-                    Button { withAnimation { showInterruptedBanner = false } } label: {
-                        Image(systemName: "xmark").font(.caption2)
-                    }.buttonStyle(.plain).foregroundStyle(theme.foregroundSecondary)
-                }
-                .padding(12)
-                .background(theme.warningAccent.opacity(0.08))
-                .overlay(RoundedRectangle(cornerRadius: AppTheme.Radius.small)
-                    .stroke(theme.warningAccent.opacity(0.3), lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small))
-                .padding(.horizontal, 20).padding(.top, 52)
-                .transition(.move(edge: .top).combined(with: .opacity))
-                .zIndex(2)
             }
         }
     }

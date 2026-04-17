@@ -18,7 +18,6 @@ struct ProjectLauncherView: View {
         }
         .frame(minWidth: 320, minHeight: 500)
         .laoWindowBackground()
-        .appErrorBanner(viewModel.container.bannerState)
         .task {
             viewModel.notificationDelegate.launcherViewModel = viewModel
             UNUserNotificationCenter.current().delegate = viewModel.notificationDelegate
@@ -218,10 +217,9 @@ struct ProjectLauncherView: View {
         guard !trimmedPath.isEmpty else { return }
 
         let url = URL(fileURLWithPath: trimmedPath, isDirectory: true)
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            viewModel.container.bannerState.show(.warning(lang.root.projectNotFound, message: trimmedPath))
-            return
-        }
+        // Missing folder is already signalled by the row's warning icon
+        // (projectsWithMissingFolders); no need for a redundant top toast.
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
 
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }

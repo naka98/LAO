@@ -442,9 +442,6 @@ struct AppStrings: @unchecked Sendable {
         let blockerNoExportable: String
         let completionBlockedTitle: String
 
-        // Interrupted elaboration recovery
-        let elaborationInterrupted: (Int) -> String
-
         // Export action
         let viewItem: String
 
@@ -508,6 +505,8 @@ struct AppStrings: @unchecked Sendable {
         let converted: String
         let designComplete: String
         let designFailed: String
+        let createFailed: String
+        let deleteFailed: String
 
         // Filters
         let filterAll: String
@@ -1128,7 +1127,6 @@ extension AppStrings {
             blockerSpecIssues: "Blocking spec issues remain",
             blockerNoExportable: "No completed design items (run design and confirm first)",
             completionBlockedTitle: "Cannot complete yet",
-            elaborationInterrupted: { n in "\(n) item\(n == 1 ? "" : "s") had elaboration interrupted. Restart elaboration." },
             viewItem: "View Item",
             startDesignWork: "Start Design",
             revisionReviewTitle: "Revision Review",
@@ -1176,6 +1174,8 @@ extension AppStrings {
             converted: "In Design",
             designComplete: "Design Complete",
             designFailed: "Design Failed",
+            createFailed: "Failed to create idea",
+            deleteFailed: "Failed to delete idea",
             filterAll: "All",
             filterAnalyzed: "Analyzed",
             filterConverted: "In Design",
@@ -1753,7 +1753,6 @@ extension AppStrings {
             blockerSpecIssues: "해결되지 않은 스펙 문제가 있습니다",
             blockerNoExportable: "완료된 설계 항목이 없습니다 (설계 후 확인해 주세요)",
             completionBlockedTitle: "아직 완료할 수 없습니다",
-            elaborationInterrupted: { n in "\(n)개 항목의 설계가 중단되었습니다. 다시 시작해 주세요." },
             viewItem: "항목 보기",
             startDesignWork: "설계 착수",
             revisionReviewTitle: "수정 검토",
@@ -1801,6 +1800,8 @@ extension AppStrings {
             converted: "설계 중",
             designComplete: "설계 완료",
             designFailed: "설계 실패",
+            createFailed: "아이디어 생성에 실패했습니다",
+            deleteFailed: "아이디어 삭제에 실패했습니다",
             filterAll: "전체",
             filterAnalyzed: "분석됨",
             filterConverted: "설계 중",

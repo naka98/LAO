@@ -73,6 +73,18 @@ struct IdeaBoardView: View {
                 selectedIdeaId = nil
             }
         }
+        .alert(
+            viewModel.errorAlert?.title ?? "",
+            isPresented: Binding(
+                get: { viewModel.errorAlert != nil },
+                set: { if !$0 { viewModel.errorAlert = nil } }
+            ),
+            presenting: viewModel.errorAlert
+        ) { _ in
+            Button(lang.common.confirm) { }
+        } message: { item in
+            Text(item.detail)
+        }
     }
 
     // MARK: - Header

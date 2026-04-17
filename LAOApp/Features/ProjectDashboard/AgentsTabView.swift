@@ -13,6 +13,7 @@ struct AgentsTabView: View {
     @State private var isRefreshingModels = false
     @State private var validationStatus = ""
     @State private var modelEntries: [ProviderKey: [ModelCatalogService.ModelEntry]] = [:]
+    @State private var errorAlert: ErrorAlert?
 
     // New agent form state
     @State private var newName = ""
@@ -103,6 +104,18 @@ struct AgentsTabView: View {
         }
         .sheet(item: $editingAgent, onDismiss: resetForm) { agent in
             agentFormSheet(editing: agent)
+        }
+        .alert(
+            errorAlert?.title ?? "",
+            isPresented: Binding(
+                get: { errorAlert != nil },
+                set: { if !$0 { errorAlert = nil } }
+            ),
+            presenting: errorAlert
+        ) { _ in
+            Button(lang.common.confirm) { }
+        } message: { item in
+            Text(item.detail)
         }
     }
 
@@ -257,7 +270,7 @@ struct AgentsTabView: View {
             agents.append(created)
             showingNewAgent = false
         } catch {
-            container.bannerState.show(.critical(lang.agents.createFailed, message: error.localizedDescription))
+            errorAlert = ErrorAlert(title: lang.agents.createFailed, detail: error.localizedDescription)
         }
     }
 
@@ -275,7 +288,7 @@ struct AgentsTabView: View {
             }
             editingAgent = nil
         } catch {
-            container.bannerState.show(.critical(lang.agents.updateFailed, message: error.localizedDescription))
+            errorAlert = ErrorAlert(title: lang.agents.updateFailed, detail: error.localizedDescription)
         }
     }
 
@@ -284,7 +297,7 @@ struct AgentsTabView: View {
             try await container.agentService.deleteAgent(id: id)
             agents.removeAll(where: { $0.id == id })
         } catch {
-            container.bannerState.show(.critical(lang.agents.deleteFailed, message: error.localizedDescription))
+            errorAlert = ErrorAlert(title: lang.agents.deleteFailed, detail: error.localizedDescription)
         }
     }
 
@@ -297,7 +310,11 @@ struct AgentsTabView: View {
                 agents[idx] = updated
             }
         } catch {
-            container.bannerState.show(.critical(lang.agents.updateFailed, message: error.localizedDescription))
+            // Revert the toggle so UI matches actual DB state on failure.
+            if let idx = agents.firstIndex(where: { $0.id == agent.id }) {
+                agents[idx].isEnabled = !enabled
+            }
+            errorAlert = ErrorAlert(title: lang.agents.updateFailed, detail: error.localizedDescription)
         }
     }
 

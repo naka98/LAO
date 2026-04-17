@@ -73,7 +73,6 @@ struct ProjectWorkspaceView: View {
             title: viewModel.project?.name ?? "LAO",
             identifier: "lao-project-\(viewModel.projectId.uuidString)"
         ))
-        .appErrorBanner(container.bannerState)
         .background(
             WindowCloseGuard(
                 shouldPreventClose: { hasActiveWorkflow },

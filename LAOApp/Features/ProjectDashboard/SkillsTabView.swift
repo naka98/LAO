@@ -9,6 +9,7 @@ struct SkillsTabView: View {
     @State private var skills: [Skill] = []
     @State private var showingNewSkill = false
     @State private var editingSkill: Skill?
+    @State private var errorAlert: ErrorAlert?
 
     // Form state
     @State private var formRole: AgentRole = .pm
@@ -88,6 +89,18 @@ struct SkillsTabView: View {
         }
         .sheet(item: $editingSkill) { skill in
             skillFormSheet(editing: skill)
+        }
+        .alert(
+            errorAlert?.title ?? "",
+            isPresented: Binding(
+                get: { errorAlert != nil },
+                set: { if !$0 { errorAlert = nil } }
+            ),
+            presenting: errorAlert
+        ) { _ in
+            Button(lang.common.confirm) { }
+        } message: { item in
+            Text(item.detail)
         }
     }
 
@@ -219,7 +232,7 @@ struct SkillsTabView: View {
             showingNewSkill = false
             resetForm()
         } catch {
-            container.bannerState.show(.critical(lang.skills.createFailed, message: error.localizedDescription))
+            errorAlert = ErrorAlert(title: lang.skills.createFailed, detail: error.localizedDescription)
         }
     }
 
@@ -236,7 +249,7 @@ struct SkillsTabView: View {
             editingSkill = nil
             resetForm()
         } catch {
-            container.bannerState.show(.critical(lang.skills.updateFailed, message: error.localizedDescription))
+            errorAlert = ErrorAlert(title: lang.skills.updateFailed, detail: error.localizedDescription)
         }
     }
 
@@ -245,7 +258,7 @@ struct SkillsTabView: View {
             try await container.skillService.deleteSkill(id: id)
             skills.removeAll(where: { $0.id == id })
         } catch {
-            container.bannerState.show(.critical(lang.skills.deleteFailed, message: error.localizedDescription))
+            errorAlert = ErrorAlert(title: lang.skills.deleteFailed, detail: error.localizedDescription)
         }
     }
 }
