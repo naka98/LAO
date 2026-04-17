@@ -11,7 +11,7 @@ struct WindowCloseGuard: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { @MainActor in
             guard let window = view.window else { return }
             context.coordinator.install(on: window)
         }
@@ -33,6 +33,7 @@ struct WindowCloseGuard: NSViewRepresentable {
         var onCloseAttempt: () -> Void = {}
         var onWindowClose: (() -> Void)?
 
+        @MainActor
         func install(on window: NSWindow) {
             guard self.window == nil else { return }
             self.window = window
