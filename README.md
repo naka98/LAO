@@ -1,3 +1,5 @@
+English | [한국어](README.ko.md)
+
 # LAO macOS App
 
 ![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue)
