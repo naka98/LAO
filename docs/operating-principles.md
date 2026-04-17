@@ -170,6 +170,7 @@ DeliverableItem 간의 관계를 표현하는 방향 그래프.
 * `uses` — A가 B를 호출/참조
 * `refines` — A가 B를 개선/확장
 * `replaces` — A가 B를 대체
+* `calls` — A가 B를 호출 (최종 DesignDocument 단계의 교차 참조에서 추가로 허용)
 
 Work Graph는 두 경로로 생성된다:
 1. **IdeaBoard Synthesis** — 수렴 시 자연어 논의에서 entity/relationship 추출 → `roadmapJSON`으로 Director에 전달
