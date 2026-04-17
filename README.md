@@ -131,6 +131,12 @@ Configure at least one CLI agent provider in Settings → Agents:
 
 ---
 
+## Documentation
+
+- [Why LAO](docs/why-lao.md) — the problem LAO is designed to solve
+- [Operating Principles](docs/operating-principles.md) — workflow phases, roles, and deliverable structure
+- [Design Principles](docs/design-principles.md) — quality standards for design output
+
 ## Contributing
 
 Bug reports and feature requests are welcome via [GitHub Issues](../../issues).
