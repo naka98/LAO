@@ -405,6 +405,14 @@ struct AppStrings: @unchecked Sendable {
         let structureApprovalConfirm: String
         let structureApprovalBack: String
 
+        // Finish Approval (elaboration complete → consistency check + export gate)
+        let finishApprovalTitle: String
+        let finishApprovalMessage: String
+        let finishApprovalWarning: String
+        let finishApprovalConfirm: String
+        let finishApprovalBack: String
+        let runFinishCTA: String
+
         // Cluster-level review
         let clusterConfirmAll: String
         let clusterScenarioSuffix: String
@@ -1097,6 +1105,12 @@ extension AppStrings {
             structureApprovalWarning: "After approval, structural changes will require re-elaboration of affected items.",
             structureApprovalConfirm: "Approve & Start Specification",
             structureApprovalBack: "Back to Review",
+            finishApprovalTitle: "Run Consistency Check & Export",
+            finishApprovalMessage: "All design items have been elaborated. Run a cross-item consistency check and export the final spec?",
+            finishApprovalWarning: "If issues are found, you'll be asked to review and apply fixes before export.",
+            finishApprovalConfirm: "Run Consistency Check & Export",
+            finishApprovalBack: "Back",
+            runFinishCTA: "Run Consistency Check & Export",
             clusterConfirmAll: "Confirm All",
             clusterScenarioSuffix: "scenario",
             clusterMoreFormat: { n in "+ \(n) more" },
@@ -1716,6 +1730,12 @@ extension AppStrings {
             structureApprovalWarning: "승인 후 구조 변경 시 관련 항목의 재작성이 필요합니다.",
             structureApprovalConfirm: "승인 후 사양 작성 시작",
             structureApprovalBack: "검토로 돌아가기",
+            finishApprovalTitle: "일관성 검사 및 내보내기",
+            finishApprovalMessage: "모든 설계 항목 작성이 완료되었습니다. 항목 간 일관성 검사를 실행하고 최종 사양을 내보낼까요?",
+            finishApprovalWarning: "이슈가 발견되면 내보내기 전에 검토 후 수정 사항을 적용할 수 있습니다.",
+            finishApprovalConfirm: "일관성 검사 및 내보내기",
+            finishApprovalBack: "돌아가기",
+            runFinishCTA: "일관성 검사 및 내보내기",
             clusterConfirmAll: "전체 확인",
             clusterScenarioSuffix: "시나리오",
             clusterMoreFormat: { n in "외 \(n)건" },

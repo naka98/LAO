@@ -27,7 +27,10 @@ struct ElaborationProgressOverlay: View {
     private var totalCount: Int { allItems.count }
     private var completedCount: Int { allItems.filter { $0.item.status == .completed }.count }
     private var failedCount: Int { allItems.filter { $0.item.status == .needsRevision && !vm.activeItemWorks.keys.contains($0.item.id) }.count }
-    private var isAllDone: Bool { !vm.isElaborating && completedCount > 0 }
+    /// Anchored on `isElaborationFullyDone` (not just `!isElaborating`) so the footer
+    /// state does not flicker into "All complete" during the brief idle gap between
+    /// parallel-elaboration groups.
+    private var isAllDone: Bool { vm.isElaborationFullyDone && completedCount > 0 }
 
     private var hasExportable: Bool {
         workflow.map { !$0.deliverables.flatMap(\.exportableItems).isEmpty } ?? false
@@ -55,23 +58,16 @@ struct ElaborationProgressOverlay: View {
         .transition(.opacity)
         .onChange(of: isAllDone) { _, done in
             guard done else { return }
-            // Auto-finish only after initial elaboration.
-            // Block during: retry, consistency review/fix, or already-finished workflow.
-            guard !vm.isRetryElaboration,
-                  !vm.showConsistencyReview,
-                  !vm.isConsistencyElaborating,
-                  vm.workflow?.phase != .completed else {
-                // Retry succeeded with no failures — auto-dismiss so user can export from inspector
-                if vm.isRetryElaboration && failedCount == 0 {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { onDismiss() }
-                }
+            // Retry succeeded with no failures — auto-dismiss so the user returns to the
+            // inspector where the morphed header "Export" button is now visible.
+            if vm.isRetryElaboration && failedCount == 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { onDismiss() }
                 return
             }
-            if failedCount == 0 && hasExportable {
-                // All succeeded — auto-chain to finishWorkflow
-                vm.scheduleAutoFinish(delay: .seconds(0.8))
-            }
-            // failedCount > 0: stay open so the user can retry or proceed via footer buttons
+            // Initial run: do NOT auto-chain into finishWorkflow. The user explicitly
+            // triggers consistency check + export via the footer button or the header
+            // "Export" slot, going through the finish-approval overlay (matching the
+            // structure-approval pattern).
         }
     }
 
@@ -242,7 +238,7 @@ struct ElaborationProgressOverlay: View {
                 .controlSize(.regular)
                 if hasExportable {
                     Button {
-                        vm.scheduleAutoFinish(delay: .seconds(0.3))
+                        vm.requestFinishApproval()
                     } label: {
                         Label(lang.design.export, systemImage: "square.and.arrow.up")
                             .frame(minWidth: 80)
@@ -250,6 +246,7 @@ struct ElaborationProgressOverlay: View {
                     .buttonStyle(.borderedProminent)
                     .tint(theme.positiveAccent)
                     .controlSize(.regular)
+                    .disabled(!vm.isElaborationFullyDone)
                 } else {
                     Button { onDismiss() } label: {
                         Label(lang.common.dismiss, systemImage: "xmark")
@@ -259,11 +256,23 @@ struct ElaborationProgressOverlay: View {
                     .controlSize(.regular)
                 }
             } else if isAllDone {
-                // All succeeded
+                // All succeeded — invite the user to explicitly trigger finish.
                 Label(lang.design.elaborationAllComplete, systemImage: "checkmark.circle.fill")
                     .font(.callout.weight(.medium))
                     .foregroundStyle(theme.positiveAccent)
                 Spacer()
+                if hasExportable {
+                    Button {
+                        vm.requestFinishApproval()
+                    } label: {
+                        Label(lang.design.runFinishCTA, systemImage: "square.and.arrow.up")
+                            .frame(minWidth: 80)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(theme.positiveAccent)
+                    .controlSize(.regular)
+                    .disabled(!vm.isElaborationFullyDone)
+                }
             } else {
                 Spacer()
                 if vm.isElaborating {

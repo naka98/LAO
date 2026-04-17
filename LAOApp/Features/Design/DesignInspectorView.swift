@@ -1253,11 +1253,12 @@ extension DesignWorkflowView {
                       let wf = vm.workflow,
                       wf.allItemsConfirmed,
                       vm.hasSubstantiveExport,
-                      !vm.isFinishing {
-                // Items already elaborated (e.g. restored from stuck session) — let user
-                // trigger finishWorkflow directly since "설계 착수" requires isPreElaboration.
+                      !vm.isFinishing,
+                      vm.isElaborationFullyDone {
+                // Items elaborated (initial run or restored from stuck session) — user
+                // explicitly triggers finish via the finish-approval overlay.
                 Button {
-                    Task { await vm.finishWorkflow() }
+                    vm.requestFinishApproval()
                 } label: {
                     Label(lang.design.export, systemImage: "square.and.arrow.up")
                 }

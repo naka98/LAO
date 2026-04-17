@@ -132,6 +132,12 @@ struct DesignWorkflowView: View {
             }
         }
         .overlay {
+            if vm.showFinishApproval {
+                finishApprovalOverlay
+                    .transition(.opacity)
+            }
+        }
+        .overlay {
             if showElaborationProgressOverlay {
                 ElaborationProgressOverlay(
                     vm: vm,
@@ -151,7 +157,10 @@ struct DesignWorkflowView: View {
                 container.activeWorkflowCoordinator.clearAttention(requestId: rid)
                 await vm.loadFromRequest()
             }
-            // Auto-restore: re-show overlay for failed items, or auto-finish if ready
+            // Auto-restore: re-show overlay for failed or interrupted items.
+            // Fully-elaborated state no longer auto-triggers finishWorkflow — the user
+            // explicitly invokes it via the morphed header "Export" button (which routes
+            // through the finish-approval overlay).
             if let wf = vm.workflow,
                wf.phase != .completed,
                wf.isStructureApproved,
@@ -167,7 +176,6 @@ struct DesignWorkflowView: View {
                     }
                 } else if wf.allItemsConfirmed,
                           !wf.deliverables.flatMap(\.exportableItems).isEmpty {
-                    // Check for incomplete items (e.g. inProgress→pending after interrupted elaboration)
                     let hasIncompleteItems = wf.deliverables.flatMap(\.items).contains {
                         $0.designVerdict != .excluded && ($0.status == .pending || $0.status == .needsRevision)
                     }
@@ -176,10 +184,9 @@ struct DesignWorkflowView: View {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             showElaborationProgressOverlay = true
                         }
-                    } else {
-                        // All clear — auto-finish (consistency check → export)
-                        await vm.finishWorkflow()
                     }
+                    // else: fully elaborated. The header "Export" button is now visible
+                    // for the user to trigger finish explicitly.
                 }
             }
         }

@@ -107,4 +107,88 @@ extension DesignWorkflowView {
         case .exporting: return lang.design.finishStepExporting
         }
     }
+
+    // MARK: - Finish Approval Overlay (elaboration complete → consistency check + export gate)
+
+    var finishApprovalOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.4)
+                .ignoresSafeArea()
+                .onTapGesture {}
+
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.title3)
+                        .foregroundStyle(theme.accentPrimary)
+                    Text(lang.design.finishApprovalTitle)
+                        .font(.headline)
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 24)
+                .padding(.bottom, 12)
+
+                Divider()
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(lang.design.finishApprovalMessage)
+                            .font(AppTheme.Typography.label)
+                            .foregroundStyle(theme.foregroundSecondary)
+
+                        if let wf = vm.workflow {
+                            let exportableCount = wf.deliverables.flatMap(\.exportableItems).count
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("\(exportableCount) items · \(wf.deliverables.count) sections")
+                                    .font(AppTheme.Typography.caption)
+                                    .foregroundStyle(theme.foregroundSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(theme.accentPrimary.opacity(0.06))
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small))
+                        }
+
+                        HStack(alignment: .top, spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.caption).foregroundStyle(theme.warningAccent)
+                            Text(lang.design.finishApprovalWarning)
+                                .font(AppTheme.Typography.caption)
+                                .foregroundStyle(theme.warningAccent)
+                        }
+                    }
+                    .padding(24)
+                }
+
+                Divider()
+
+                HStack(spacing: 12) {
+                    Button {
+                        vm.cancelFinishApproval()
+                    } label: {
+                        Text(lang.design.finishApprovalBack)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(SecondaryActionButtonStyle())
+                    .controlSize(.large)
+
+                    Button {
+                        vm.confirmFinishApproval()
+                    } label: {
+                        Label(lang.design.finishApprovalConfirm, systemImage: "square.and.arrow.up")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PrimaryActionButtonStyle())
+                    .controlSize(.large)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+            }
+            .frame(minWidth: 400, maxWidth: 520, minHeight: 260, maxHeight: 420)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.large))
+            .shadow(color: .black.opacity(0.2), radius: 20, y: 4)
+        }
+    }
 }

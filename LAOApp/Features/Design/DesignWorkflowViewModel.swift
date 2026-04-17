@@ -44,6 +44,9 @@ final class DesignWorkflowViewModel {
     var showStructureApproval: Bool = false
     var structureGateResult: PhaseGateResult?
 
+    // Finish Approval confirmation (elaboration complete → consistency check + export gate)
+    var showFinishApproval: Bool = false
+
     // Skeleton generation state (stage 2, after approach selection)
     var isGeneratingSkeleton: Bool = false
     var skeletonStreamOutput: String = ""
@@ -141,6 +144,19 @@ final class DesignWorkflowViewModel {
                 && $0.designVerdict != .excluded
             }
         }
+    }
+
+    /// True only when all active items finished elaboration and no in-flight elaboration remains.
+    /// Used as the canonical guard before entering finishWorkflow / requestFinishApproval to
+    /// prevent the between-parallel-groups idle gap from triggering premature completion.
+    var isElaborationFullyDone: Bool {
+        guard !isElaborating, !isPreparingElaboration else { return false }
+        guard let wf = workflow else { return false }
+        let hasInFlight = wf.deliverables.flatMap(\.items).contains {
+            $0.designVerdict != .excluded
+            && ($0.status == .pending || $0.status == .inProgress)
+        }
+        return !hasInFlight
     }
 
     /// REFINE sub-phase: planning phase, structure not yet approved.
@@ -814,6 +830,35 @@ final class DesignWorkflowViewModel {
     func cancelStructureApproval() {
         showStructureApproval = false
         structureGateResult = nil
+    }
+
+    // MARK: - Finish Approval (elaboration complete → consistency check + export gate)
+
+    /// User requests finish approval — shows confirmation overlay if elaboration is fully done.
+    func requestFinishApproval() {
+        guard isElaborationFullyDone else {
+            logger.notice("requestFinishApproval blocked — elaboration not fully done")
+            return
+        }
+        guard let wf = workflow,
+              wf.allItemsConfirmed,
+              !wf.deliverables.flatMap(\.exportableItems).isEmpty else {
+            logger.notice("requestFinishApproval blocked — workflow not ready for completion")
+            return
+        }
+        guard !isFinishing else { return }
+        showFinishApproval = true
+    }
+
+    /// User confirms finish approval — closes overlay and starts consistency check + export.
+    func confirmFinishApproval() {
+        showFinishApproval = false
+        Task { await finishWorkflow() }
+    }
+
+    /// User cancels finish approval from the confirmation overlay.
+    func cancelFinishApproval() {
+        showFinishApproval = false
     }
 
     // MARK: - Skeleton Generation (Stage 2: Structure → Graph → Canvas)
@@ -2688,14 +2733,25 @@ final class DesignWorkflowViewModel {
         logger.info("scheduleAutoFinish: queued")
         autoFinishTask = Task { [weak self] in
             try? await Task.sleep(for: delay)
-            guard !Task.isCancelled else { return }
-            await self?.finishWorkflow()
+            guard !Task.isCancelled, let self else { return }
+            // Re-verify after sleep: between parallel groups, isElaborating can briefly
+            // flip to false while items in the next group are still .pending. The earlier
+            // !isElaborating check at queue time is not enough on its own.
+            guard self.isElaborationFullyDone else {
+                logger.notice("scheduleAutoFinish: aborted — elaboration not fully done after wakeup")
+                return
+            }
+            await self.finishWorkflow()
         }
     }
 
     /// Finish the workflow: run consistency check, then either pause for user review or proceed to export.
     func finishWorkflow() async {
         logger.info("finishWorkflow: enter")
+        guard isElaborationFullyDone else {
+            logger.notice("finishWorkflow blocked — elaboration not fully done")
+            return
+        }
         guard let wf = workflow, wf.allItemsConfirmed else {
             logger.notice("finishWorkflow blocked — not all items confirmed")
             return
