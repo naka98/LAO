@@ -46,12 +46,12 @@ struct MarkdownTextView: View {
 
     // MARK: - Cached Regex (compiled once)
 
-    private static let boldOpenRegex = try! NSRegularExpression(pattern: #"\*\*([""''「」『』\(\[{<])"#)
-    private static let boldCloseRegex = try! NSRegularExpression(pattern: #"([""''」』\)\]}>])\*\*"#)
-    private static let urlRegex = try! NSRegularExpression(pattern: #"(?i)\bhttps?://[^\s<>()\[\]]+[^\s<>().,\]\)]"#)
-    private static let filePathRegex = try! NSRegularExpression(pattern: #"(?<!\S)(/(?:[^\s\)\]\}\>,;:]+/)*[^\s\)\]\}\>,;:]+|\.lao/(?:[^\s\)\]\}\>,;:]+/)*[^\s\)\]\}\>,;:]+|(?:\./|\.\./)(?:[^\s\)\]\}\>,;:]+/)*[^\s\)\]\}\>,;:]+)(?::\d+(?::\d+)?)?"#)
-    private static let lineSuffixRegex = try! NSRegularExpression(pattern: #":\d+(?::\d+)?$"#)
-    private static let numberedListRegex = try! NSRegularExpression(pattern: #"^\d+\.\s+"#)
+    nonisolated private static let boldOpenRegex = try! NSRegularExpression(pattern: #"\*\*([""''「」『』\(\[{<])"#)
+    nonisolated private static let boldCloseRegex = try! NSRegularExpression(pattern: #"([""''」』\)\]}>])\*\*"#)
+    nonisolated private static let urlRegex = try! NSRegularExpression(pattern: #"(?i)\bhttps?://[^\s<>()\[\]]+[^\s<>().,\]\)]"#)
+    nonisolated private static let filePathRegex = try! NSRegularExpression(pattern: #"(?<!\S)(/(?:[^\s\)\]\}\>,;:]+/)*[^\s\)\]\}\>,;:]+|\.lao/(?:[^\s\)\]\}\>,;:]+/)*[^\s\)\]\}\>,;:]+|(?:\./|\.\./)(?:[^\s\)\]\}\>,;:]+/)*[^\s\)\]\}\>,;:]+)(?::\d+(?::\d+)?)?"#)
+    nonisolated private static let lineSuffixRegex = try! NSRegularExpression(pattern: #":\d+(?::\d+)?$"#)
+    nonisolated private static let numberedListRegex = try! NSRegularExpression(pattern: #"^\d+\.\s+"#)
 
     var body: some View {
         if cachedBlocks.isEmpty && !content.isEmpty {
