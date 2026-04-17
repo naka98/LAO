@@ -1,6 +1,24 @@
 # LAO macOS App
 
+![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue)
+![Swift](https://img.shields.io/badge/Swift-6.0-orange)
+![License](https://img.shields.io/badge/License-MIT-green)
+
 LAO is a macOS-native AI design workflow application built with SwiftUI. It transforms ideas into AI-execution-friendly design documents through CLI-based AI agents.
+
+---
+
+## Screenshots
+
+| IdeaBoard | Approach Selection |
+|:---:|:---:|
+| ![IdeaBoard](docs/images/01.png) | ![Approach Selection](docs/images/02.png) |
+| AI expert panels explore an idea | Compare multiple approaches side-by-side |
+
+| Planning — Work Graph | Planning — Details & Decisions |
+|:---:|:---:|
+| ![Planning](docs/images/03.png) | ![Planning Details](docs/images/04.png) |
+| Visualize the design structure | Drill into specs and resolve questions |
 
 ---
 
@@ -112,6 +130,15 @@ Configure at least one CLI agent provider in Settings → Agents:
 - Design documents saved per-request at `{project_root}/.lao/docs/{request_id}/`
 
 ---
+
+## Contributing
+
+Bug reports and feature requests are welcome via [GitHub Issues](../../issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details. Pull requests are not currently accepted.
+
+## Security
+
+For security vulnerabilities, please follow the process described in [SECURITY.md](SECURITY.md) — do not open a public issue.
 
 ## License
 
