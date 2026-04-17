@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/naka98/LAO/security/advisories/new
+    about: Please report security issues privately, not via public issues.
+  - name: Discussions
+    url: https://github.com/naka98/LAO/discussions
+    about: For questions and general discussion.
