@@ -127,7 +127,7 @@ Configure at least one CLI agent provider in Settings → Agents:
 ## Data Storage
 
 - SQLite database at `~/Library/Application Support/LAO/`
-- Design documents saved per-request at `{project_root}/.lao/docs/{request_id}/`
+- Design documents saved per-request at `{project_root}/.lao/{ideaId}/{requestId}/`
 
 ---
 
