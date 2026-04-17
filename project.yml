@@ -97,7 +97,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao
         PRODUCT_NAME: LAO
         INFOPLIST_KEY_CFBundleDisplayName: LAO
-        MARKETING_VERSION: "0.7.0"
+        MARKETING_VERSION: "0.7.1"
         CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_ENTITLEMENTS: LAOApp/LAOApp.entitlements
