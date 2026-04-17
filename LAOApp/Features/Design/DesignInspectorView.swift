@@ -1219,19 +1219,7 @@ extension DesignWorkflowView {
                     guard let wf = vm.workflow else { return true }
                     return !wf.blockingUncertainties.isEmpty || wf.pendingReviewCount > 0
                 }())
-            } else if vm.isSpecifyPhase && (vm.isPreElaboration || vm.hasIncompleteElaborationItems) {
-                // SPECIFY (pre-elaboration or interrupted): start/resume detailed spec work
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        showElaborationProgressOverlay = true
-                    }
-                    Task { await vm.elaborateAllPending() }
-                } label: {
-                    Label(lang.design.startDesignWork, systemImage: "hammer.fill")
-                }
-                .buttonStyle(PrimaryActionButtonStyle())
-                .controlSize(.small)
-            } else if vm.isElaborating, let wf = vm.workflow {
+            } else if (vm.isElaborating || vm.isPreparingElaboration), let wf = vm.workflow {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.mini)
                     Text(lang.design.elaborationProgressFormat(wf.completedItemCount, wf.totalItemCount))
@@ -1249,6 +1237,18 @@ extension DesignWorkflowView {
                 .padding(.horizontal, 8).padding(.vertical, 4)
                 .background(theme.accentPrimary.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small))
+            } else if vm.isSpecifyPhase && (vm.isPreElaboration || vm.hasIncompleteElaborationItems) {
+                // SPECIFY (pre-elaboration or interrupted): start/resume detailed spec work
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showElaborationProgressOverlay = true
+                    }
+                    Task { await vm.elaborateAllPending() }
+                } label: {
+                    Label(lang.design.startDesignWork, systemImage: "hammer.fill")
+                }
+                .buttonStyle(PrimaryActionButtonStyle())
+                .controlSize(.small)
             } else if vm.isSpecifyPhase,
                       let wf = vm.workflow,
                       wf.allItemsConfirmed,

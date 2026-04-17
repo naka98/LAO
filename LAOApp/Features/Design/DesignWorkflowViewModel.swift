@@ -927,6 +927,7 @@ final class DesignWorkflowViewModel {
         let sections: [DeliverableSection]
         do {
             let (response, _) = try await runWithFallback(prompt: structurePrompt, jsonSchema: DesignJSONSchemas.skeleton) { [weak self] text in
+                guard !Task.isCancelled else { return }
                 Task { @MainActor in
                     self?.skeletonStreamOutput = text
                 }
@@ -1511,6 +1512,7 @@ final class DesignWorkflowViewModel {
                     projectId: project.id,
                     rootPath: project.rootPath
                 ) { [weak self] chunk in
+                    guard !Task.isCancelled else { return }
                     let text = accumulator.append(chunk)
                     let now = Date()
                     throttle.update(text) { [weak self] text in
@@ -1901,6 +1903,7 @@ final class DesignWorkflowViewModel {
 
         do {
             let (response, _) = try await runWithFallback(prompt: prompt, jsonSchema: DesignJSONSchemas.chat) { [weak self] text in
+                guard !Task.isCancelled else { return }
                 Task { @MainActor in
                     self?.revisionStreamOutput = text
                 }
@@ -2322,6 +2325,7 @@ final class DesignWorkflowViewModel {
 
         do {
             let (response, _) = try await runWithFallback(prompt: prompt, jsonSchema: DesignJSONSchemas.chat) { [weak self] text in
+                guard !Task.isCancelled else { return }
                 Task { @MainActor in
                     self?.uncertaintyStreamOutput = text
                 }
@@ -2505,6 +2509,7 @@ final class DesignWorkflowViewModel {
                 prompt: prompt,
                 jsonSchema: DesignJSONSchemas.chat
             ) { [weak self] text in
+                guard !Task.isCancelled else { return }
                 Task { @MainActor in
                     self?.consistencyStreamOutput = text
                 }
@@ -2690,6 +2695,13 @@ final class DesignWorkflowViewModel {
     /// Elaborate all pending / needsRevision items with parallel execution within dependency groups.
     func elaborateAllPending() async {
         guard let wf = workflow, wf.isStructureApproved else { return }
+        // Prevent a concurrent second TaskGroup from spinning up if the caller
+        // re-triggers (e.g. header "Start Design" pressed while a prior run is
+        // still live because the Back path didn't cancel it in time).
+        guard !isElaborating, !isPreparingElaboration else {
+            logger.notice("elaborateAllPending blocked — already running (isElaborating=\(self.isElaborating), isPreparing=\(self.isPreparingElaboration))")
+            return
+        }
 
         // Compute parallel groups from edge graph (falls back to stored parallelGroup)
         let computedGroups = wf.computeParallelGroups()
@@ -3963,6 +3975,7 @@ final class DesignWorkflowViewModel {
                 prompt: prompt,
                 jsonSchema: DesignJSONSchemas.skeletonRelationships
             ) { [weak self] text in
+                guard !Task.isCancelled else { return }
                 Task { @MainActor in self?.graphStreamOutput = text }
             }
             if let result = DesignStepResultParser.parseSkeletonRelationshipsResponse(from: response) {

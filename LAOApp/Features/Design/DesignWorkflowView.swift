@@ -213,14 +213,20 @@ struct DesignWorkflowView: View {
             }
         }
         .onDisappear {
-            // Back navigation while consistency check is running: cancel the LLM call
-            // so it doesn't keep burning tokens invisibly. User resumes via the
-            // header "Export" button after re-entering.
+            // Back navigation: cancel any in-flight LLM calls so they don't keep
+            // running invisibly. User resumes via the header action on re-entry.
+            // gracefulStop() covers executionTask cancel + inProgress→pending +
+            // activeItemWorks clear + flushSync, so it subsumes the plain flush case
+            // when elaboration or preparation is active.
             if vm.finishingStep == .consistencyCheck {
                 vm.cancelFinishingConsistencyCheck()
             }
             let ref = vm
-            Task { await ref.flushSync() }
+            if vm.isElaborating || vm.isPreparingElaboration {
+                Task { await ref.gracefulStop() }
+            } else {
+                Task { await ref.flushSync() }
+            }
         }
     }
 
