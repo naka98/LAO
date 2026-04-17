@@ -1,0 +1,179 @@
+name: LAO
+options:
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+    DEVELOPMENT_TEAM: ""
+packages: {}
+targets:
+  LAODomain:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Packages/LAODomain/Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.domain
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+
+  LAOServices:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Packages/LAOServices/Sources
+    dependencies:
+      - target: LAODomain
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.services
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+
+  LAOPersistence:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Packages/LAOPersistence/Sources
+    dependencies:
+      - target: LAODomain
+      - target: LAOServices
+      - sdk: libsqlite3.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.persistence
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+
+  LAORuntime:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Packages/LAORuntime/Sources
+    dependencies:
+      - target: LAODomain
+      - target: LAOServices
+      - target: LAOPersistence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.runtime
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+
+  LAOProviders:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Packages/LAOProviders/Sources
+    dependencies:
+      - target: LAODomain
+      - target: LAOServices
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.providers
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+
+  LAO:
+    type: application
+    platform: macOS
+    sources:
+      - path: LAOApp
+        excludes:
+          - "Assets.xcassets"
+          - "LAOApp.entitlements"
+      - path: LAOApp/Assets.xcassets
+        buildPhase: resources
+    dependencies:
+      - target: LAODomain
+      - target: LAOServices
+      - target: LAOPersistence
+      - target: LAORuntime
+      - target: LAOProviders
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao
+        PRODUCT_NAME: LAO
+        INFOPLIST_KEY_CFBundleDisplayName: LAO
+        MARKETING_VERSION: "0.7.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_ENTITLEMENTS: LAOApp/LAOApp.entitlements
+    postBuildScripts:
+      - name: Inject Build Number From Git
+        basedOnDependencyAnalysis: false
+        script: |
+          set -e
+          # Runs after Info.plist is generated but before the final CodeSign step.
+          # We only mutate the plist; the build system's subsequent CodeSign
+          # will pick up the new value, so no manual re-signing is needed.
+          BUILD_NUMBER=$(git -C "${SRCROOT}" rev-list --count HEAD 2>/dev/null || echo 1)
+          INFO_PLIST="${CODESIGNING_FOLDER_PATH}/Contents/Info.plist"
+          if [ -f "$INFO_PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Delete :CFBundleVersion" "$INFO_PLIST" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string ${BUILD_NUMBER}" "$INFO_PLIST"
+          fi
+
+  LAOCoreFlowTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/LAOCoreFlowTests
+    dependencies:
+      - target: LAO
+      - target: LAODomain
+      - target: LAOServices
+      - target: LAOPersistence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.coreflowtests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        AD_HOC_CODE_SIGNING_ALLOWED: YES
+    postBuildScripts:
+      - name: Sign Unit Test Bundle
+        script: |
+          if [ -n "${CODESIGNING_FOLDER_PATH:-}" ]; then
+            BINARY_PATH="${CODESIGNING_FOLDER_PATH}/Contents/MacOS/${EXECUTABLE_NAME}"
+            if [ -f "$BINARY_PATH" ]; then
+              /usr/bin/codesign --force --sign - --timestamp=none "$BINARY_PATH"
+              /usr/bin/codesign --force --sign - --timestamp=none "${CODESIGNING_FOLDER_PATH}"
+            fi
+          fi
+
+  LAOUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/LAOUITests
+    dependencies:
+      - target: LAO
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leewaystudio.lao.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: LAO
+        CODE_SIGN_STYLE: Automatic
+        AD_HOC_CODE_SIGNING_ALLOWED: YES
+    postBuildScripts:
+      - name: Sign UI Test Bundle
+        script: |
+          if [ -n "${CODESIGNING_FOLDER_PATH:-}" ]; then
+            BINARY_PATH="${CODESIGNING_FOLDER_PATH}/Contents/MacOS/${EXECUTABLE_NAME}"
+            if [ -f "$BINARY_PATH" ]; then
+              /usr/bin/codesign --force --sign - --timestamp=none "$BINARY_PATH"
+              /usr/bin/codesign --force --sign - --timestamp=none "${CODESIGNING_FOLDER_PATH}"
+            fi
+          fi
+
+schemes:
+  LAO:
+    build:
+      targets:
+        LAO: all
+    test:
+      targets:
+        - name: LAOCoreFlowTests
+        - name: LAOUITests

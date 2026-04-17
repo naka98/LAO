@@ -1,0 +1,53 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Xcode
+LAO.xcodeproj/
+*.xcodeproj/
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.xcuserstate
+*.xcscmblueprint
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Secrets
+.env
+.env.*
+credentials.json
+
+# Claude Code
+CLAUDE.md
+.claude/
+
+# SQLite runtime
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Build artifacts
+*.ipa
+*.app
+*.dSYM.zip
+*.xcresult
+
+# Misc
+*.swp
+*.swo
+*~
