@@ -17,6 +17,9 @@ jobs:
           # Full history needed for build-number injection (git rev-list --count HEAD)
           fetch-depth: 0
 
+      - name: Select Xcode 26.4
+        run: sudo xcode-select -s /Applications/Xcode_26.4.app
+
       - name: Show Xcode Version
         run: xcodebuild -version
 
