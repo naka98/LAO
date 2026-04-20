@@ -60,11 +60,6 @@ struct DesignWorkflowView: View {
             if vm.showConsistencyReview {
                 ConsistencyReviewOverlay(
                     vm: vm,
-                    onDismiss: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            vm.cancelConsistencyReview()
-                        }
-                    },
                     onExport: {
                         withAnimation(.easeInOut(duration: 0.2)) {
                             vm.showConsistencyReview = false

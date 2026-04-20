@@ -6,7 +6,6 @@ import SwiftUI
 /// Pattern: consistency check finds issues → director proposes fixes → user approves → actions dispatched → export.
 struct ConsistencyReviewOverlay: View {
     @Bindable var vm: DesignWorkflowViewModel
-    let onDismiss: () -> Void
     let onExport: () -> Void
 
     @Environment(\.theme) private var theme
@@ -33,7 +32,6 @@ struct ConsistencyReviewOverlay: View {
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.large))
             .shadow(color: .black.opacity(0.3), radius: 30, y: 8)
         }
-        .onExitCommand { onDismiss() }
         .transition(.opacity)
     }
 
@@ -49,12 +47,6 @@ struct ConsistencyReviewOverlay: View {
                     .foregroundStyle(theme.foregroundSecondary)
             }
             Spacer()
-            Button { onDismiss() } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(theme.foregroundTertiary)
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
@@ -174,12 +166,6 @@ struct ConsistencyReviewOverlay: View {
                 }
 
                 HStack(spacing: 10) {
-                    Button { onDismiss() } label: {
-                        Text(lang.common.cancel).frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.regular)
-
                     if vm.pendingConsistencyActions != nil && !vm.isConsistencyChatting {
                         Button { sendMessage() } label: {
                             Text(lang.design.consistencyAddComment).frame(maxWidth: .infinity)

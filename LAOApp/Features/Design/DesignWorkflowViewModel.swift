@@ -876,26 +876,6 @@ final class DesignWorkflowViewModel {
         logger.info("finishWorkflow consistency check cancelled by user")
     }
 
-    // MARK: - Consistency Review Cancellation
-
-    /// Reset all consistency review state. Called when the user closes the overlay
-    /// without approving fixes (X / ESC / Cancel / Back). Forces a clean slate so the
-    /// next finish attempt creates fresh issues rather than showing stale chat.
-    func cancelConsistencyReview() {
-        consistencyReviewTask?.cancel()
-        consistencyIssues = []
-        consistencySummary = ""
-        consistencyChatMessages = []
-        consistencyStreamOutput = ""
-        isConsistencyChatting = false
-        pendingConsistencyActions = nil
-        isConsistencyApplying = false
-        isConsistencyElaborating = false
-        consistencyReviewCompleted = false
-        showConsistencyReview = false
-        logger.info("Consistency review cancelled — state reset")
-    }
-
     // MARK: - Skeleton Generation (Stage 2: Structure → Graph → Canvas)
 
     /// Generate deliverable skeleton in two phases, then transition to planning.
