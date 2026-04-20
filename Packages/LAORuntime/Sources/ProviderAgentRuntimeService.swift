@@ -761,8 +761,11 @@ public final class ProviderBackedCLIAgentRunner: CLIAgentRunner, @unchecked Send
         let hardTimeout = await resolveHardTimeout()
         let startupTimeout = resolveStartupTimeout(hardTimeout: hardTimeout)
         let inactivityTimeout = await resolveInactivityTimeout(hardTimeout: hardTimeout)
-        return try await withCheckedThrowingContinuation { continuation in
+        let processBox = ProcessBox()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
             let process = Process()
+            processBox.store(process)
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
             let stdoutCollector = ShellOutputCollector()
@@ -909,6 +912,9 @@ public final class ProviderBackedCLIAgentRunner: CLIAgentRunner, @unchecked Send
                     continuation.resume(throwing: error)
                 }
             }
+        }
+        } onCancel: {
+            processBox.terminate()
         }
     }
 
@@ -1409,6 +1415,26 @@ private final class ResumeOnce: @unchecked Sendable {
         guard !consumed else { return false }
         consumed = true
         return true
+    }
+}
+
+/// Holds a reference to a running Process so an out-of-scope cancel handler can terminate it.
+private final class ProcessBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+
+    func store(_ p: Process) {
+        lock.lock()
+        defer { lock.unlock() }
+        process = p
+    }
+
+    func terminate() {
+        lock.lock()
+        defer { lock.unlock() }
+        if let p = process, p.isRunning {
+            p.terminate()
+        }
     }
 }
 
