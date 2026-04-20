@@ -56,93 +56,13 @@ struct DesignWorkflowView: View {
         .laoWindowBackground()
         .overlay(alignment: .top) { errorOverlay }
         .overlay { if let step = vm.finishingStep, !showElaborationProgressOverlay { finishingOverlay(step: step) } }
-        .overlay {
-            if vm.showConsistencyReview {
-                ConsistencyReviewOverlay(
-                    vm: vm,
-                    onExport: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            vm.showConsistencyReview = false
-                        }
-                        Task { await vm.proceedWithExport() }
-                    }
-                )
-                .transition(.opacity)
-            }
-        }
-        .overlay {
-            if showDocumentOverlay {
-                DesignDocumentOverlayView(
-                    items: documentOverlayItems,
-                    onDismiss: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showDocumentOverlay = false
-                        }
-                        documentOverlayItems = []
-                    }
-                )
-            }
-        }
-        .overlay {
-            if showRevisionOverlay, let targetId = revisionTargetItemId,
-               let (_, _, item) = vm.workflow?.findItem(byId: targetId) {
-                RevisionReviewOverlay(
-                    itemId: targetId,
-                    itemName: item.name,
-                    vm: vm,
-                    onDismiss: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showRevisionOverlay = false
-                        }
-                        revisionTargetItemId = nil
-                    }
-                )
-                .transition(.opacity)
-            }
-        }
-        .overlay {
-            if showUncertaintyDiscussOverlay,
-               let uId = discussingUncertaintyId,
-               let uncertainty = vm.workflow?.uncertainties.first(where: { $0.id == uId }) {
-                UncertaintyDiscussOverlay(
-                    uncertaintyId: uId,
-                    uncertainty: uncertainty,
-                    vm: vm,
-                    onDismiss: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showUncertaintyDiscussOverlay = false
-                        }
-                        discussingUncertaintyId = nil
-                    }
-                )
-                .transition(.opacity)
-            }
-        }
-        .overlay {
-            if vm.showStructureApproval {
-                structureApprovalOverlay
-                    .transition(.opacity)
-            }
-        }
-        .overlay {
-            if vm.showFinishApproval {
-                finishApprovalOverlay
-                    .transition(.opacity)
-            }
-        }
-        .overlay {
-            if showElaborationProgressOverlay {
-                ElaborationProgressOverlay(
-                    vm: vm,
-                    onDismiss: {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            showElaborationProgressOverlay = false
-                        }
-                    }
-                )
-                .transition(.opacity)
-            }
-        }
+        .overlay { consistencyReviewOverlayLayer }
+        .overlay { documentOverlayLayer }
+        .overlay { revisionOverlayLayer }
+        .overlay { uncertaintyOverlayLayer }
+        .overlay { structureApprovalOverlayLayer }
+        .overlay { finishApprovalOverlayLayer }
+        .overlay { elaborationProgressOverlayLayer }
         .accessibilityIdentifier("design-workflow-view")
         .task {
             await vm.loadAgents()
@@ -222,6 +142,102 @@ struct DesignWorkflowView: View {
             } else {
                 Task { await ref.flushSync() }
             }
+        }
+    }
+
+    // MARK: - Overlay Layers (extracted to avoid SwiftUI body type-checker timeout)
+
+    @ViewBuilder private var consistencyReviewOverlayLayer: some View {
+        if vm.showConsistencyReview {
+            ConsistencyReviewOverlay(
+                vm: vm,
+                onExport: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        vm.showConsistencyReview = false
+                    }
+                    Task { await vm.proceedWithExport() }
+                }
+            )
+            .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private var documentOverlayLayer: some View {
+        if showDocumentOverlay {
+            DesignDocumentOverlayView(
+                items: documentOverlayItems,
+                onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showDocumentOverlay = false
+                    }
+                    documentOverlayItems = []
+                }
+            )
+        }
+    }
+
+    @ViewBuilder private var revisionOverlayLayer: some View {
+        if showRevisionOverlay, let targetId = revisionTargetItemId,
+           let (_, _, item) = vm.workflow?.findItem(byId: targetId) {
+            RevisionReviewOverlay(
+                itemId: targetId,
+                itemName: item.name,
+                vm: vm,
+                onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showRevisionOverlay = false
+                    }
+                    revisionTargetItemId = nil
+                }
+            )
+            .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private var uncertaintyOverlayLayer: some View {
+        if showUncertaintyDiscussOverlay,
+           let uId = discussingUncertaintyId,
+           let uncertainty = vm.workflow?.uncertainties.first(where: { $0.id == uId }) {
+            UncertaintyDiscussOverlay(
+                uncertaintyId: uId,
+                uncertainty: uncertainty,
+                vm: vm,
+                onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showUncertaintyDiscussOverlay = false
+                    }
+                    discussingUncertaintyId = nil
+                }
+            )
+            .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private var structureApprovalOverlayLayer: some View {
+        if vm.showStructureApproval {
+            structureApprovalOverlay
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private var finishApprovalOverlayLayer: some View {
+        if vm.showFinishApproval {
+            finishApprovalOverlay
+                .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private var elaborationProgressOverlayLayer: some View {
+        if showElaborationProgressOverlay {
+            ElaborationProgressOverlay(
+                vm: vm,
+                onDismiss: {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showElaborationProgressOverlay = false
+                    }
+                }
+            )
+            .transition(.opacity)
         }
     }
 
