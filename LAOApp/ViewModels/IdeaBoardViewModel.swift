@@ -28,20 +28,24 @@ final class IdeaBoardViewModel {
     }
 
     var filteredIdeas: [Idea] {
-        ideas.filter { idea in
+        // Group-based filter: the idea-stage filter (.analyzed as representative)
+        // covers analyzing/analyzed/referencing; the design-stage filter (.designing
+        // as representative) covers legacy .converted and .designing.
+        let ideaStage: Set<IdeaStatus> = [.analyzing, .analyzed, .referencing]
+        let designStage: Set<IdeaStatus> = [.converted, .designing]
+        return ideas.filter { idea in
             let matchesSearch = searchText.isEmpty
                 || idea.title.localizedCaseInsensitiveContains(searchText)
             let matchesStatus: Bool
             if let filter = statusFilter {
-                // .converted is a legacy synonym for .designing; .referencing shows under .analyzed filter
-                let normalizedFilter = filter == .converted ? IdeaStatus.designing : filter
-                let normalizedStatus: IdeaStatus
-                switch idea.status {
-                case .converted: normalizedStatus = .designing
-                case .referencing: normalizedStatus = .analyzed
-                default: normalizedStatus = idea.status
+                switch filter {
+                case .analyzing, .analyzed, .referencing:
+                    matchesStatus = ideaStage.contains(idea.status)
+                case .converted, .designing:
+                    matchesStatus = designStage.contains(idea.status)
+                default:
+                    matchesStatus = idea.status == filter
                 }
-                matchesStatus = normalizedStatus == normalizedFilter
             } else {
                 matchesStatus = true
             }
