@@ -5,6 +5,8 @@ import LAODomain
 
 /// Derives test scenarios from a completed DesignDocument.
 /// Pure algorithmic derivation — no LLM calls.
+/// [Set] Part of the converter trilogy. Input: DesignDocument produced by `DesignDocumentConverter`.
+///       Sibling: `PlanDocumentConverter` derives an implementation plan from the same DesignDocument.
 enum TestDocumentConverter {
 
     // MARK: - Conversion

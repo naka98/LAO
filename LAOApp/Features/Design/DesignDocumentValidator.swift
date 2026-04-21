@@ -4,6 +4,12 @@ import LAODomain
 // MARK: - Design Document Validator
 
 /// Validates a DesignDocument for structural correctness before export.
+///
+/// [Scope] Document-level. Runs on the fully assembled `DesignDocument` right before file output.
+/// [Trigger] `DesignWorkflowViewModel` export path, after `DesignDocumentConverter.convert`.
+/// [Sibling]
+///   - `PhaseGateChecker` — workflow phase transitions (earlier in the flow).
+///   - `SpecReadinessValidator` — per-item spec completeness during elaboration (earlier in the flow).
 enum DesignDocumentValidator {
 
     struct Issue: CustomStringConvertible {

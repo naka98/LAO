@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// [Purpose] Renders the design document in a dedicated macOS window (separate from the workflow window).
+///           Sidebar lists all exported deliverable items; the main area shows full markdown content.
+/// [Trigger] Opened via the `designDocument` window ID when the user clicks "View Document" / "Open in Window"
+///           from the completed-phase header inside `DesignWorkflowView`.
+/// [Sibling] `DesignDocumentOverlay` — shows the same content as a modal overlay *inside* the workflow window,
+///           without opening a new window. Overlay is for quick in-flow review; this view is for sustained reading.
+/// [Flow]    Workflow completed → user clicks "Open in Window" → macOS opens designDocument scene →
+///           DesignDocumentWindowCoordinator supplies items → user selects item in sidebar → content rendered.
 struct DesignDocumentWindowView: View {
     let route: DesignDocumentWindowRoute?
     @ObservedObject var coordinator: DesignDocumentWindowCoordinator

@@ -2,6 +2,10 @@ import Foundation
 import LAODomain
 
 /// Builds prompts for the Design AI to analyze ideas with expert panels.
+///
+/// Scope: IdeaBoard feature only (initial analysis → expert panels → follow-up discussion).
+/// [Counterpart] `DesignPromptBuilder` — builds prompts for the Design workflow (analysis → planning → elaboration).
+/// [Shared]      `PromptFragments` — identity and user-context fragments injected by both builders.
 enum IdeaPromptBuilder {
 
     /// Prompt for the Design to assign expert panelists who will each propose a distinct product direction.
