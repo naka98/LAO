@@ -2,8 +2,9 @@ import SwiftUI
 
 // MARK: - Uncertainty Discussion Overlay
 
-/// Full-screen overlay for discussing a specific uncertainty with the director.
-/// Pattern: user asks about uncertainty → director discusses → proposes resolution → user approves.
+/// [Purpose] 특정 불확실성(DesignDecision)에 대해 director와 질의응답하며 해결안을 도출하는 오버레이.
+/// [Trigger] `showUncertaintyDiscussOverlay == true` && `discussingUncertaintyId != nil`.
+/// [Flow] 사용자가 불확실성 질문 → Uncertainty Discuss(이 오버레이) → director가 논의/해결안 제시 → 사용자 승인 → 해결안 반영.
 struct UncertaintyDiscussOverlay: View {
     let uncertaintyId: UUID
     let uncertainty: DesignDecision

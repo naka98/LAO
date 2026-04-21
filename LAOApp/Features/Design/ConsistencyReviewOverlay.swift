@@ -2,8 +2,12 @@ import SwiftUI
 
 // MARK: - Consistency Review Overlay
 
-/// Full-screen overlay for reviewing and fixing consistency issues before export.
-/// Pattern: consistency check finds issues → director proposes fixes → user approves → actions dispatched → export.
+/// [Purpose] 일관성 검사가 찾아낸 이슈를 사용자와 함께 검토/수정하고 승인받은 뒤 export로 이어가는 대화 오버레이.
+/// [Trigger] `vm.showConsistencyReview == true` (`beginConsistencyReview()`에서 설정).
+/// [Sibling]
+///   - `finishProgressOverlay(.consistencyCheck)`: 일관성 검사 '중' 진행 스피너.
+///     이 오버레이는 검사 '후' 이슈가 발견됐을 때만 뜸. 검사 결과 이슈가 없으면 이 오버레이는 아예 안 뜨고 바로 export로 진행.
+/// [Flow] finishProgress(검사 중) → 이슈 발견 → ConsistencyReview(이 오버레이) → director가 수정안 제시 → 사용자 승인 → actions dispatch → export.
 struct ConsistencyReviewOverlay: View {
     @Bindable var vm: DesignWorkflowViewModel
     let onExport: () -> Void

@@ -1,11 +1,18 @@
 import SwiftUI
 import LAODomain
 
-// MARK: - Finishing Overlay, Completed Phase, Failed Phase (extracted from DesignWorkflowView)
+// MARK: - Finish Progress Overlay, Completed Phase, Failed Phase (extracted from DesignWorkflowView)
 
 extension DesignWorkflowView {
 
-    @ViewBuilder func finishingOverlay(step: DesignWorkflowViewModel.FinishingStep) -> some View {
+    /// [Purpose] finish 워크플로우 각 단계(consistencyCheck / applyingFixes / exporting) 진행 중 스피너 표시.
+    /// [Trigger] `vm.finishingStep != nil` && `!showElaborationProgressOverlay`.
+    /// [Sibling]
+    ///   - `ConsistencyReviewOverlay`: 일관성 검사 '후' 이슈 검토용 대화. 이 오버레이는 검사 '중' 진행 표시.
+    ///   - `finishApprovalOverlay`: finish 트리거 전 사용자 승인 게이트. 이 오버레이는 승인 후 진행 표시.
+    ///   - `ElaborationProgressOverlay`: 설계 elaborate 단계 진행 표시. 이 오버레이는 elaborate 완료 후 finish 단계 진행 표시.
+    /// [Flow] 사용자가 finishApproval 승인 → finishProgress(.consistencyCheck) 표시 → 이슈 있으면 ConsistencyReview로 이동, 없으면 finishProgress(.exporting) → 완료.
+    @ViewBuilder func finishProgressOverlay(step: DesignWorkflowViewModel.FinishingStep) -> some View {
         ZStack {
             Color.black.opacity(0.5)
                 .ignoresSafeArea()
@@ -110,6 +117,13 @@ extension DesignWorkflowView {
 
     // MARK: - Finish Approval Overlay (elaboration complete → consistency check + export gate)
 
+    /// [Purpose] elaborate 완료 후 finish 워크플로우(일관성 검사 + export) 시작 전 사용자 승인을 받는 게이트.
+    /// [Trigger] `vm.showFinishApproval == true`.
+    /// [Sibling]
+    ///   - `structureApprovalOverlay`: REFINE → SPECIFY phase 전환 승인 게이트 (설계 착수 전).
+    ///     이 오버레이는 SPECIFY 완료 → 완료 phase 전환 승인 게이트 (export 직전).
+    ///   - `finishProgressOverlay`: 이 오버레이에서 승인 후 뜨는 진행 스피너.
+    /// [Flow] elaborate 완료 → 사용자가 "종료" 클릭 → finishApproval 표시 → 승인 → finishProgress로 이어짐.
     var finishApprovalOverlay: some View {
         ZStack {
             Color.black.opacity(0.4)

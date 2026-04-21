@@ -285,6 +285,12 @@ extension DesignWorkflowView {
 
     // MARK: - Structure Approval Confirmation Overlay (REFINE → SPECIFY)
 
+    /// [Purpose] 구조(skeleton) 생성 완료 후 사용자가 확정해 SPECIFY(설계 착수) phase로 넘어가기 전 승인받는 게이트.
+    /// [Trigger] `vm.showStructureApproval == true`.
+    /// [Sibling]
+    ///   - `finishApprovalOverlay`: SPECIFY 완료 → 완료 phase 전환 승인 게이트.
+    ///     이 오버레이는 REFINE → SPECIFY 전환 게이트. 두 오버레이 모두 phase 전환 승인용이지만 시점이 다름.
+    /// [Flow] skeleton 생성 완료 → Structure Approval(이 오버레이) → 승인 → elaborate 시작 가능.
     var structureApprovalOverlay: some View {
         ZStack {
             Color.black.opacity(0.4)

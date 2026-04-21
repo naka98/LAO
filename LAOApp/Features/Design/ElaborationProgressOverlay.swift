@@ -2,10 +2,11 @@ import SwiftUI
 
 // MARK: - Elaboration Progress Overlay
 
-/// Full-screen overlay showing design elaboration progress.
-/// Displayed when the user starts design work ("설계 착수").
-/// Shows per-item status (queued → working → done/failed) and overall progress.
-/// After elaboration completes, auto-chains into finishWorkflow (consistency check → export).
+/// [Purpose] 설계 elaborate(항목별 스펙 채우기) 단계 진행 표시. 항목별 status(queued → working → done/failed)와 전체 진행률 노출.
+/// [Trigger] `showElaborationProgressOverlay == true` (사용자가 "설계 착수" 클릭 시 또는 interrupted 상태 감지로 자동).
+/// [Sibling]
+///   - `finishProgressOverlay`: elaborate 완료 후 finish 단계(일관성 검사/수정 적용/export) 진행 표시. 이 오버레이는 elaborate 단계 자체의 진행 표시.
+/// [Flow] 사용자 "설계 착수" → Elaboration Progress(이 오버레이) → 모든 항목 완료 → 오버레이 dismiss → 사용자 "종료" → finishApproval → finishProgress → 완료.
 struct ElaborationProgressOverlay: View {
     @Bindable var vm: DesignWorkflowViewModel
     let onDismiss: () -> Void

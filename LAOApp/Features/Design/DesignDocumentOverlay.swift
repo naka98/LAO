@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Full-screen overlay that displays design documents inside the workflow view
-/// instead of opening a separate window.
-struct DesignDocumentOverlayView: View {
+/// [Purpose] 완료된 설계 문서(SPEC/BRD/DesignBrief 등)를 별도 윈도우 없이 workflow view 내부에 띄워 열람하는 오버레이.
+/// [Trigger] `showDocumentOverlay == true` && `documentOverlayItems` 비어있지 않을 때 (완료 phase에서 "문서" 버튼 클릭).
+/// [Flow] 완료 phase → 사용자가 "문서 보기" 클릭 → DesignDocument(이 오버레이) 표시 → 닫기로 dismiss.
+struct DesignDocumentOverlay: View {
     let items: [DesignDocumentItem]
     let onDismiss: () -> Void
 
