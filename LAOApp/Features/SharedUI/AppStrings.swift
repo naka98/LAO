@@ -502,7 +502,8 @@ struct AppStrings: @unchecked Sendable {
         let noIdeasTitle: String
         let noIdeasDescription: String
         let newIdeaDefaultTitle: String
-        let converted: String
+        let ideaStage: String
+        let designStage: String
         let designComplete: String
         let designFailed: String
         let createFailed: String
@@ -510,9 +511,9 @@ struct AppStrings: @unchecked Sendable {
 
         // Filters
         let filterAll: String
-        let filterAnalyzed: String
-        let filterConverted: String
         let filterDraft: String
+        let filterIdeaStage: String
+        let filterDesignStage: String
         let filterDesigned: String
         let filterDesignFailed: String
 
@@ -1171,15 +1172,16 @@ extension AppStrings {
             noIdeasTitle: "No Ideas Yet",
             noIdeasDescription: "Create an idea to brainstorm with AI expert panels.",
             newIdeaDefaultTitle: "New Idea",
-            converted: "In Design",
+            ideaStage: "Idea Stage",
+            designStage: "Design Stage",
             designComplete: "Design Complete",
             designFailed: "Design Failed",
             createFailed: "Failed to create idea",
             deleteFailed: "Failed to delete idea",
             filterAll: "All",
-            filterAnalyzed: "Analyzed",
-            filterConverted: "In Design",
             filterDraft: "Draft",
+            filterIdeaStage: "Idea Stage",
+            filterDesignStage: "Design Stage",
             filterDesigned: "Design Complete",
             filterDesignFailed: "Design Failed",
             stepAgentNotConfigured: "Step Agent is not configured.",
@@ -1797,15 +1799,16 @@ extension AppStrings {
             noIdeasTitle: "아이디어 없음",
             noIdeasDescription: "아이디어를 생성하여 AI 전문가 패널과 브레인스토밍하세요.",
             newIdeaDefaultTitle: "새 아이디어",
-            converted: "설계 중",
+            ideaStage: "아이디어 단계",
+            designStage: "설계 단계",
             designComplete: "설계 완료",
             designFailed: "설계 실패",
             createFailed: "아이디어 생성에 실패했습니다",
             deleteFailed: "아이디어 삭제에 실패했습니다",
             filterAll: "전체",
-            filterAnalyzed: "분석됨",
-            filterConverted: "설계 중",
             filterDraft: "초안",
+            filterIdeaStage: "아이디어 단계",
+            filterDesignStage: "설계 단계",
             filterDesigned: "설계 완료",
             filterDesignFailed: "설계 실패",
             stepAgentNotConfigured: "Step Agent가 설정되지 않았습니다.",

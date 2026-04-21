@@ -7,6 +7,9 @@ import LAODomain
 /// optimized for AI development tool consumption (Claude Code, Codex, etc.).
 ///
 /// Pure function with no side effects — safe to call from any context.
+/// [Set] Converter trilogy entry point. This converter must run first — its DesignDocument output is
+///       the shared input for `PlanDocumentConverter` (→ ImplementationPlanDocument) and
+///       `TestDocumentConverter` (→ TestScenariosDocument).
 enum DesignDocumentConverter {
 
     // MARK: - Public API

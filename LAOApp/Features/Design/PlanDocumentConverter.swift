@@ -5,6 +5,8 @@ import LAODomain
 
 /// Converts a DesignDocument into an ImplementationPlanDocument.
 /// Pure algorithmic derivation — no LLM calls.
+/// [Set] Part of the converter trilogy. Input: DesignDocument produced by `DesignDocumentConverter`.
+///       Sibling: `TestDocumentConverter` derives test scenarios from the same DesignDocument.
 enum PlanDocumentConverter {
 
     // MARK: - Conversion

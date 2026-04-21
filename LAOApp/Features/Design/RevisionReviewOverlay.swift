@@ -2,8 +2,9 @@ import SwiftUI
 
 // MARK: - Revision Review Overlay
 
-/// Full-screen overlay for the revision review workflow.
-/// Pattern: user states revision → director reviews → user approves → action dispatched.
+/// [Purpose] 특정 항목의 수정 요청을 director와 대화하면서 수정안을 받고 승인하는 오버레이.
+/// [Trigger] `showRevisionOverlay == true` && `revisionTargetItemId != nil` (항목별 수정 트리거).
+/// [Flow] 사용자가 항목 수정 요청 → Revision Review(이 오버레이) → director가 수정안 제시 → 사용자 승인 → action dispatch.
 struct RevisionReviewOverlay: View {
     let itemId: UUID
     let itemName: String

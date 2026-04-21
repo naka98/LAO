@@ -42,6 +42,12 @@ struct PhaseGateResult: Equatable {
 }
 
 /// Phase-gate checker — validates readiness before phase transitions.
+///
+/// [Scope] Workflow-level gate. Evaluates a whole DesignWorkflow to decide if it may advance a phase.
+/// [Trigger] `DesignWorkflowViewModel.requestStructureApproval` / `confirmStructureApproval`.
+/// [Sibling]
+///   - `SpecReadinessValidator` — item-level spec field completeness (not phase-level).
+///   - `DesignDocumentValidator` — post-export structural check on the produced DesignDocument.
 enum PhaseGateChecker {
 
     /// Gate for planning → completed (wraps existing completionBlockers).
@@ -92,6 +98,10 @@ enum PhaseGateChecker {
 
 // MARK: - Planner Verdict
 
+/// Planner agent's phase-gate verdict on a DeliverableItem.
+/// Controls whether the item proceeds to elaboration (approved), needs rework (rejected/unreviewed).
+/// [Distinction] `DesignVerdict` is the *decision-maker's* directional judgment on item inclusion/exclusion
+///               and is independent of spec technical readiness. PlannerVerdict is agent-internal only.
 enum PlannerVerdict: String, Codable, Equatable {
     case unreviewed        // not yet reviewed by planner
     case approved          // planner accepts current state
@@ -621,6 +631,13 @@ struct SpecReadinessIssue: Identifiable {
 
 /// Validates that a DeliverableItem's spec contains the required fields
 /// for its section type, so AI dev tools can consume it.
+///
+/// [Scope] Per-item. Runs against a single `DeliverableItem` during elaboration.
+/// [Trigger] `DesignWorkflowViewModel` item-update and elaboration-response handlers;
+///           also `DesignWorkflow.hasBlockingIssues` for workflow-wide rollups.
+/// [Sibling]
+///   - `PhaseGateChecker` — workflow-level phase transition gate, not per-item.
+///   - `DesignDocumentValidator` — document-structure validation at export time.
 enum SpecReadinessValidator {
 
     /// Validate a single item and return any issues.

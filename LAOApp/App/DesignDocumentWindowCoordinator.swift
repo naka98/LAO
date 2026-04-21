@@ -13,6 +13,13 @@ struct DesignDocumentItem: Identifiable {
     let completedAt: Date?
 }
 
+/// Bridges the completed-phase export to macOS's multi-window system.
+/// Stores exported DesignDocumentItem arrays keyed by sessionID so `DesignDocumentWindowView`
+/// (opened as a separate window scene) can fetch them after the window appears.
+///
+/// [Trigger] Populated by `DesignWorkflowViewModel` before opening the `designDocument` window scene.
+/// [Sibling] `ActiveWorkflowCoordinator` — manages DesignWorkflowViewModel lifecycles across view
+///           appearances; unrelated to document display.
 @MainActor
 final class DesignDocumentWindowCoordinator: ObservableObject {
     @Published private var payloads: [String: [DesignDocumentItem]] = [:]

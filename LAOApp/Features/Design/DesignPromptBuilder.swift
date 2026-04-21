@@ -13,6 +13,11 @@ private struct PreExtractedGraph: Codable {
 
 /// Centralizes all prompt-building logic for the Design workflow.
 /// Each method returns a fully-formed prompt string ready for LLM consumption.
+///
+/// Scope: Design workflow only (analysis → approach selection → planning → elaboration → revision → consistency).
+/// [Counterpart] `DesignStepResultParser` — parses the LLM responses that this builder's prompts produce.
+/// [Sibling]     `IdeaPromptBuilder`  — builds prompts for the IdeaBoard feature (idea analysis, expert panels).
+///               `PromptFragments`    — shared text fragments injected by both builders (design identity, user context).
 struct DesignPromptBuilder {
     let workflow: DesignWorkflow?
     let taskInput: String

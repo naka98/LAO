@@ -55,7 +55,7 @@ struct DesignWorkflowView: View {
         .frame(minWidth: 900, minHeight: 500)
         .laoWindowBackground()
         .overlay(alignment: .top) { errorOverlay }
-        .overlay { if let step = vm.finishingStep, !showElaborationProgressOverlay { finishingOverlay(step: step) } }
+        .overlay { if let step = vm.finishingStep, !showElaborationProgressOverlay { finishProgressOverlay(step: step) } }
         .overlay { consistencyReviewOverlayLayer }
         .overlay { documentOverlayLayer }
         .overlay { revisionOverlayLayer }
@@ -164,7 +164,7 @@ struct DesignWorkflowView: View {
 
     @ViewBuilder private var documentOverlayLayer: some View {
         if showDocumentOverlay {
-            DesignDocumentOverlayView(
+            DesignDocumentOverlay(
                 items: documentOverlayItems,
                 onDismiss: {
                     withAnimation(.easeInOut(duration: 0.2)) {

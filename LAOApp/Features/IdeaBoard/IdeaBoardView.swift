@@ -183,10 +183,10 @@ struct IdeaBoardView: View {
                     FilterChipButton(title: lang.ideaBoard.filterDraft, isSelected: viewModel.statusFilter == .draft) {
                         viewModel.statusFilter = .draft
                     }
-                    FilterChipButton(title: lang.ideaBoard.filterAnalyzed, isSelected: viewModel.statusFilter == .analyzed) {
+                    FilterChipButton(title: lang.ideaBoard.filterIdeaStage, isSelected: viewModel.statusFilter == .analyzed) {
                         viewModel.statusFilter = .analyzed
                     }
-                    FilterChipButton(title: lang.ideaBoard.filterConverted, isSelected: viewModel.statusFilter == .designing) {
+                    FilterChipButton(title: lang.ideaBoard.filterDesignStage, isSelected: viewModel.statusFilter == .designing) {
                         viewModel.statusFilter = .designing
                     }
                     FilterChipButton(title: lang.ideaBoard.filterDesigned, isSelected: viewModel.statusFilter == .designed) {
@@ -249,13 +249,15 @@ struct IdeaBoardView: View {
                         .lineLimit(1)
                     Spacer()
                     switch idea.status {
+                    case .analyzing, .analyzed, .referencing:
+                        BadgeView(title: lang.ideaBoard.ideaStage, tone: .blue)
                     case .converted, .designing:
-                        BadgeView(title: lang.ideaBoard.converted, tone: .blue)
+                        BadgeView(title: lang.ideaBoard.designStage, tone: .amber)
                     case .designed:
                         BadgeView(title: lang.ideaBoard.designComplete, tone: .green)
                     case .designFailed:
                         BadgeView(title: lang.ideaBoard.designFailed, tone: .red)
-                    default:
+                    case .draft:
                         EmptyView()
                     }
                 }
