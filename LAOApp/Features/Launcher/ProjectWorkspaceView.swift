@@ -107,13 +107,13 @@ struct ProjectWorkspaceView: View {
             // If the project no longer exists (e.g. restored window for a deleted project),
             // close the window automatically.
             if viewModel.project == nil {
-                NSApp.keyWindow?.close()
+                closeOwnWindow()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .laoProjectDeleted)) { notification in
             if let deletedId = notification.object as? UUID, deletedId == viewModel.projectId {
                 container.activeWorkflowCoordinator.openProjectWindowIds.remove(viewModel.projectId)
-                NSApp.keyWindow?.close()
+                closeOwnWindow()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .laoProjectUpdated)) { notification in
@@ -125,6 +125,14 @@ struct ProjectWorkspaceView: View {
 
     private var hasActiveWorkflow: Bool {
         container.activeWorkflowCoordinator.activePerProject[viewModel.projectId] != nil
+    }
+
+    /// Close this view's own NSWindow by matching the identifier injected via WindowTitle.
+    /// Avoids relying on NSApp.keyWindow, which may point to the launcher when the
+    /// close is triggered remotely (e.g. project deletion from the launcher's context menu).
+    private func closeOwnWindow() {
+        let id = NSUserInterfaceItemIdentifier("lao-project-\(viewModel.projectId.uuidString)")
+        NSApp.windows.first { $0.identifier == id }?.close()
     }
 
     // MARK: - Actions
