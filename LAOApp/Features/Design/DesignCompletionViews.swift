@@ -16,19 +16,6 @@ extension DesignWorkflowView {
                 Text(finishingStepLabel(step))
                     .font(.headline)
                     .foregroundStyle(theme.foregroundPrimary)
-
-                // Cancel is only safe during consistencyCheck — applyingFixes mutates
-                // workflow state and exporting writes files, both unsafe to interrupt.
-                if step == .consistencyCheck {
-                    Button {
-                        vm.cancelFinishingConsistencyCheck()
-                    } label: {
-                        Label(lang.common.cancel, systemImage: "xmark.circle")
-                    }
-                    .buttonStyle(SecondaryActionButtonStyle())
-                    .controlSize(.small)
-                    .padding(.top, 8)
-                }
             }
             .padding(40)
             .background(theme.surfacePrimary)
