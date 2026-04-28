@@ -117,6 +117,8 @@ Goal of this stage: produce a detailed design document the developer can **imple
 
 ### 3.4 Handoff (MCP Handoff)
 
+> Implementation details (export artifacts, `.mcp.json` registration, MCP server surface) — see [handoff.md](handoff.md). This section covers principles only.
+
 Goal of this stage: the development AI **receives the design intent accurately** and begins implementation.
 
 **The development AI receiving the design document should have nothing to ask back.**

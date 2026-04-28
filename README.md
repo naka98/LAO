@@ -45,6 +45,12 @@ LAO is a macOS-native AI design workflow application built with SwiftUI. It tran
 - Provider support: Claude, Codex, Gemini
 - Skill management per project
 
+### Handoff to Claude Code / Codex
+- On workflow completion, exports a fixed set of design artifacts (`design.json`, `DESIGN_SPEC.md`, `BRD.md`, `PLAN.md`, `TEST.md`, …) to `{project_root}/.lao/{ideaId}/{requestId}/`
+- Auto-writes `.mcp.json` to the project root, registering the bundled `LAOMCPServer` so MCP-aware AI tools auto-discover the design
+- One-click "Open in Claude Code / Codex" launches the chosen CLI in Terminal with an initial prompt that points at `DESIGN_SPEC.md`
+- See [docs/handoff.md](docs/handoff.md) for the full file list, MCP resource/tool surface, and prerequisites
+
 ---
 
 ## Architecture
@@ -139,6 +145,7 @@ Configure at least one CLI agent provider in Settings → Agents:
 - [Why LAO](docs/why-lao.md) — the problem LAO is designed to solve
 - [Operating Principles](docs/operating-principles.md) — workflow phases, roles, and deliverable structure
 - [Design Principles](docs/design-principles.md) — quality standards for design output
+- [Handoff Mechanism](docs/handoff.md) — how completed designs are delivered to Claude Code / Codex (export artifacts, `.mcp.json`, MCP server surface)
 
 ## Contributing
 
