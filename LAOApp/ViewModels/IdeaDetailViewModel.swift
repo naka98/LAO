@@ -1742,7 +1742,8 @@ final class IdeaDetailViewModel {
                     role: .design,
                     content: explanation.trimmingCharacters(in: .whitespacesAndNewlines),
                     unifiedReferencesJSON: refsJSON,
-                    referenceFeedback: feedback
+                    referenceFeedback: feedback,
+                    isReferencePhase: true
                 )
                 refMessage.modelName = agent.model
                 messages.append(refMessage)

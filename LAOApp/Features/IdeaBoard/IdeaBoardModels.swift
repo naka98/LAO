@@ -24,6 +24,10 @@ struct IdeaMessage: Identifiable, Codable {
     var unifiedReferencesJSON: String?
     /// User feedback that triggered this reference regeneration
     var referenceFeedback: String?
+    /// True when this message was produced by `requestUnifiedReferences`.
+    /// Distinct from `unifiedReferencesJSON` which is the optional parsed payload — this flag
+    /// survives parsing failures so chat routing and overlay queries stay consistent.
+    var isReferencePhase: Bool?
 
     init(
         id: UUID = UUID(),
@@ -37,7 +41,8 @@ struct IdeaMessage: Identifiable, Codable {
         contextSummary: String? = nil,
         graphJSON: String? = nil,
         unifiedReferencesJSON: String? = nil,
-        referenceFeedback: String? = nil
+        referenceFeedback: String? = nil,
+        isReferencePhase: Bool? = nil
     ) {
         self.id = id
         self.role = role
@@ -51,6 +56,7 @@ struct IdeaMessage: Identifiable, Codable {
         self.graphJSON = graphJSON
         self.unifiedReferencesJSON = unifiedReferencesJSON
         self.referenceFeedback = referenceFeedback
+        self.isReferencePhase = isReferencePhase
     }
 }
 

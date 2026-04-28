@@ -124,8 +124,11 @@ struct IdeaDetailView: View {
             } else if message.contextSummary != nil {
                 // Context compression card is also standalone — no tree rail
                 contextSummaryCard(message)
-            } else if message.unifiedReferencesJSON != nil {
-                // Reference data lives in the overlay — skip chat thread rendering
+            } else if message.isReferencePhase == true || message.unifiedReferencesJSON != nil {
+                // Reference data lives in the overlay — skip chat thread rendering.
+                // OR-check: isReferencePhase covers the new identity flag (set even when
+                // parsing fails), unifiedReferencesJSON keeps backward compatibility with
+                // rows persisted before the flag was introduced.
                 EmptyView()
             } else {
                 designSubtree(message, messageIndex: messageIndex)
@@ -1148,7 +1151,11 @@ struct IdeaDetailView: View {
                         } else {
                             // LLM explanation text — render markdown so headings, tables, and
                             // horizontal rules display properly instead of as raw characters.
-                            if let lastRefMsg = viewModel.messages.last(where: { $0.unifiedReferencesJSON != nil }) {
+                            // Match latest reference-phase message regardless of parse success
+                            // so a fresh failed attempt replaces stale prior content.
+                            if let lastRefMsg = viewModel.messages.last(where: {
+                                $0.isReferencePhase == true || $0.unifiedReferencesJSON != nil
+                            }) {
                                 MarkdownTextView(
                                     content: lastRefMsg.content,
                                     workspaceRootPath: viewModel.project.rootPath,
