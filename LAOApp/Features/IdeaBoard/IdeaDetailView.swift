@@ -1146,11 +1146,15 @@ struct IdeaDetailView: View {
                         } else if let err = viewModel.referenceErrorMessage {
                             referenceErrorBlock(err)
                         } else {
-                            // LLM explanation text
+                            // LLM explanation text — render markdown so headings, tables, and
+                            // horizontal rules display properly instead of as raw characters.
                             if let lastRefMsg = viewModel.messages.last(where: { $0.unifiedReferencesJSON != nil }) {
-                                Text(lastRefMsg.content)
-                                    .font(AppTheme.Typography.body)
-                                    .foregroundStyle(theme.foregroundPrimary)
+                                MarkdownTextView(
+                                    content: lastRefMsg.content,
+                                    workspaceRootPath: viewModel.project.rootPath,
+                                    fontSize: 13,
+                                    lineSpacing: 4
+                                )
                             }
 
                             // References grouped by category
