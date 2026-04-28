@@ -1709,12 +1709,17 @@ final class IdeaDetailViewModel {
             )
 
             do {
-                let response = try await container.cliAgentRunner.run(
+                // Use streaming to keep the CLI startup timer healthy: Claude buffers
+                // output in non-streaming mode and can exceed the 120s startup window
+                // before the first byte arrives. Streaming injects --output-format
+                // stream-json + --include-partial-messages, so partial events flush
+                // within seconds. We discard chunks (overlay shows a spinner only).
+                let response = try await container.cliAgentRunner.runStreaming(
                     agent: agent,
                     prompt: prompt,
                     projectId: project.id,
                     rootPath: project.rootPath
-                )
+                ) { _ in }
                 guard !Task.isCancelled else { return }
                 trackUsage(promptLength: prompt.count, responseLength: response.count)
 
