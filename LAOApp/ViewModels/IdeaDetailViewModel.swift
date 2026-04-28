@@ -1564,32 +1564,42 @@ final class IdeaDetailViewModel {
         return (opinion, jsonCandidate)
     }
 
-    /// Separate a ```references JSON block from the expert's opinion text.
-    /// Returns (opinion text without the block, parsed referencesJSON string or nil).
+    /// Separate ```references JSON blocks from the expert's opinion text.
+    /// Returns (opinion text without the blocks, merged referencesJSON string or nil).
+    /// Models sometimes emit one fence per category instead of a single combined block;
+    /// this loops until no further fences remain and concatenates all valid arrays.
     nonisolated static func separateReferencesBlock(from response: String) -> (opinion: String, referencesJSON: String?) {
-        guard let blockStart = response.range(of: "```references", options: .caseInsensitive) else {
-            return (response, nil)
-        }
-        let afterMarker = blockStart.upperBound
-        guard let blockEnd = response.range(of: "```", range: afterMarker..<response.endIndex) else {
-            return (response, nil)
-        }
-        let jsonCandidate = String(response[afterMarker..<blockEnd.lowerBound])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        // Validate it's a JSON array
-        guard let data = jsonCandidate.data(using: .utf8),
-              let _ = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return (response, nil)
-        }
-
         var opinion = response
-        var removeEnd = blockEnd.upperBound
-        if removeEnd < opinion.endIndex, opinion[removeEnd] == "\n" {
-            removeEnd = opinion.index(after: removeEnd)
+        var merged: [Any] = []
+
+        while let blockStart = opinion.range(of: "```references", options: .caseInsensitive) {
+            let afterMarker = blockStart.upperBound
+            guard let blockEnd = opinion.range(of: "```", range: afterMarker..<opinion.endIndex) else {
+                break  // Unclosed fence — keep remaining text as-is
+            }
+            let jsonCandidate = String(opinion[afterMarker..<blockEnd.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard let data = jsonCandidate.data(using: .utf8),
+                  let arr = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                break  // Malformed block — preserve what's already accumulated
+            }
+
+            merged.append(contentsOf: arr)
+
+            var removeEnd = blockEnd.upperBound
+            if removeEnd < opinion.endIndex, opinion[removeEnd] == "\n" {
+                removeEnd = opinion.index(after: removeEnd)
+            }
+            opinion.removeSubrange(blockStart.lowerBound..<removeEnd)
         }
-        opinion.removeSubrange(blockStart.lowerBound..<removeEnd)
-        return (opinion, jsonCandidate)
+
+        guard !merged.isEmpty,
+              let mergedData = try? JSONSerialization.data(withJSONObject: merged),
+              let mergedJSON = String(data: mergedData, encoding: .utf8) else {
+            return (response, nil)
+        }
+        return (opinion, mergedJSON)
     }
 
     nonisolated static func separateLimitationsBlock(from response: String) -> (text: String, limitationsJSON: String?) {
