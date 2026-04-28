@@ -726,12 +726,13 @@ final class IdeaDetailViewModel {
                     currentQuestion: trimmed,
                     projectRootPath: project.rootPath
                 )
-                let response = try await container.cliAgentRunner.run(
+                // Streaming keeps the CLI startup timer healthy — see requestUnifiedReferences.
+                let response = try await container.cliAgentRunner.runStreaming(
                     agent: agent,
                     prompt: prompt,
                     projectId: project.id,
                     rootPath: project.rootPath
-                )
+                ) { _ in }
                 guard !Task.isCancelled else { return }
                 trackUsage(promptLength: prompt.count, responseLength: response.count)
                 let replyMsg = IdeaExpertFollowUp(
@@ -799,12 +800,13 @@ final class IdeaDetailViewModel {
                     initialOpinion: expert.opinion,
                     ideaBody: ideaBody
                 )
-                let response = try await container.cliAgentRunner.run(
+                // Streaming keeps the CLI startup timer healthy — see requestUnifiedReferences.
+                let response = try await container.cliAgentRunner.runStreaming(
                     agent: agent,
                     prompt: prompt,
                     projectId: project.id,
                     rootPath: project.rootPath
-                )
+                ) { _ in }
                 guard !Task.isCancelled else { return }
                 trackUsage(promptLength: prompt.count, responseLength: response.count)
 
@@ -922,12 +924,13 @@ final class IdeaDetailViewModel {
                         userProfile: userProfile
                     )
                 }
-                let response = try await container.cliAgentRunner.run(
+                // Streaming keeps the CLI startup timer healthy — see requestUnifiedReferences.
+                let response = try await container.cliAgentRunner.runStreaming(
                     agent: agent,
                     prompt: prompt,
                     projectId: project.id,
                     rootPath: project.rootPath
-                )
+                ) { _ in }
                 trackUsage(promptLength: prompt.count, responseLength: response.count)
                 // Extract entities and limitations from initial analysis responses; preserve existing for follow-ups
                 let (afterEntities, entitiesJSON) = isFollowUpRound
