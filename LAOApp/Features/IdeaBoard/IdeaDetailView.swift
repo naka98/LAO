@@ -1143,6 +1143,8 @@ struct IdeaDetailView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 40)
+                        } else if let err = viewModel.referenceErrorMessage {
+                            referenceErrorBlock(err)
                         } else {
                             // LLM explanation text
                             if let lastRefMsg = viewModel.messages.last(where: { $0.unifiedReferencesJSON != nil }) {
@@ -1217,6 +1219,42 @@ struct IdeaDetailView: View {
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.large))
         }
+    }
+
+    /// Inline failure block shown inside the reference overlay when search fails.
+    /// Mirrors `designFailedRow` styling to keep the failure UI consistent across phases.
+    private func referenceErrorBlock(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(AppTheme.Typography.caption)
+                    .foregroundStyle(theme.warningAccent)
+                Text(lang.ideaBoard.referenceSearchFailed)
+                    .font(AppTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(theme.warningAccent)
+                Spacer()
+                Button {
+                    viewModel.requestUnifiedReferences(feedback: nil)
+                } label: {
+                    Label(lang.common.retry, systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            Text(message)
+                .font(AppTheme.Typography.caption)
+                .foregroundStyle(theme.foregroundSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        }
+        .padding(14)
+        .background(theme.warningAccent.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.medium))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
+                .stroke(theme.warningAccent.opacity(0.25), lineWidth: 0.5)
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Group references by category for the reference phase overlay.

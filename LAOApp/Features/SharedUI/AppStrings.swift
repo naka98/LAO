@@ -620,6 +620,7 @@ struct AppStrings: @unchecked Sendable {
         let referenceCategoryImplementation: String
         let referenceFeedbackPlaceholder: String
         let referenceRequestMessage: String
+        let referenceSearchFailed: String
         // BRD error messages
         let jsonNotFoundError: String
         let jsonParseFailedFormat: (String) -> String
@@ -1277,6 +1278,7 @@ extension AppStrings {
             referenceCategoryImplementation: "Implementation",
             referenceFeedbackPlaceholder: "Enter feedback (e.g. 'Not this kind of feel...')",
             referenceRequestMessage: "Show me reference images.",
+            referenceSearchFailed: "Reference search failed",
             jsonNotFoundError: "No JSON found in the response",
             jsonParseFailedFormat: { s in "JSON parse failed: \(s)…" }
         ),
@@ -1904,6 +1906,7 @@ extension AppStrings {
             referenceCategoryImplementation: "구현",
             referenceFeedbackPlaceholder: "피드백을 입력하세요 (예: '이런 느낌이 아니라...')",
             referenceRequestMessage: "레퍼런스 이미지를 보여주세요.",
+            referenceSearchFailed: "레퍼런스 탐색 실패",
             jsonNotFoundError: "응답에서 JSON을 찾을 수 없습니다",
             jsonParseFailedFormat: { s in "JSON 파싱 실패: \(s)…" }
         ),

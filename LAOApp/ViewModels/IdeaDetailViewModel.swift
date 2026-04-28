@@ -32,6 +32,7 @@ final class IdeaDetailViewModel {
     var isGeneratingUnifiedReferences = false
     var unifiedReferenceFeedback: String = ""
     var showReferencePhaseOverlay = false
+    var referenceErrorMessage: String?
 
     // BRD generation state (triggered after synthesis)
     var brdJSON: String = ""
@@ -1685,6 +1686,7 @@ final class IdeaDetailViewModel {
 
         idea.status = .referencing
         isGeneratingUnifiedReferences = true
+        referenceErrorMessage = nil
 
         let ideaBody = messages.first(where: { $0.role == .user })?.content ?? idea.title
         let expertSummary = IdeaPromptBuilder.buildThreadSummary(from: messages)
@@ -1734,7 +1736,7 @@ final class IdeaDetailViewModel {
                 isGeneratingUnifiedReferences = false
             } catch {
                 isGeneratingUnifiedReferences = false
-                errorMessage = error.localizedDescription
+                referenceErrorMessage = error.localizedDescription
             }
         }
     }
@@ -1762,6 +1764,7 @@ final class IdeaDetailViewModel {
     func skipReferencePhase() {
         idea.status = .analyzed
         showReferencePhaseOverlay = false
+        referenceErrorMessage = nil
         Task { await saveIdea() }
     }
 
@@ -1769,6 +1772,7 @@ final class IdeaDetailViewModel {
     func confirmReferencesAndProceed() {
         idea.status = .analyzed
         showReferencePhaseOverlay = false
+        referenceErrorMessage = nil
         // referenceImages already populated with confirmed/unconfirmed state
         // Brief generation will pick them up via buildEnrichedRoadmapJSON()
     }
