@@ -269,8 +269,11 @@ final class IdeaDetailViewModel {
         await refreshAgents()
         userProfile = await container.userProfileService.getProfile()
 
-        // Build the initial idea body from the first user message
-        let ideaBody = messages.first(where: { $0.role == .user })?.content ?? idea.title
+        // Build the initial idea body from everything captured during the listening stage:
+        // every user message + the latest intake reflection (prose + structured understanding).
+        // Falls back to the title only when nothing else exists (e.g. legacy ideas).
+        let aggregated = IdeaPromptBuilder.buildAnalysisIdeaBody(from: messages)
+        let ideaBody = aggregated.isEmpty ? idea.title : aggregated
 
         let prompt = IdeaPromptBuilder.buildInitialAnalysisPrompt(ideaBody: ideaBody, agents: availableAgents, userProfile: userProfile)
 
@@ -353,9 +356,103 @@ final class IdeaDetailViewModel {
         isAnalyzing = false
     }
 
+    // MARK: - Intake Listening (first-meeting reflection)
+
+    /// Send the client's idea (first message or follow-up while still in listening) and trigger
+    /// the Intake reflection. The pipeline does NOT proceed to expert-panel analysis until the
+    /// user explicitly clicks "Start analysis" via `confirmAndAnalyze()`.
+    func sendIdea(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isAnalyzing else { return }
+        messages.append(IdeaMessage(role: .user, content: trimmed))
+        // Update idea title from the first user message so the list shows something meaningful.
+        if idea.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || idea.title == lang.ideaBoard.newIdeaDefaultTitle {
+            let firstLine = trimmed.components(separatedBy: "\n").first ?? trimmed
+            idea.title = firstLine.count > 60 ? String(firstLine.prefix(60)) + "..." : firstLine
+        }
+        designFailed = false
+        errorMessage = nil
+        idea.status = .listening
+        isAnalyzing = true
+        analysisStatus = lang.ideaBoard.intakeReflectingStatus
+        currentTask?.cancel()
+        currentTask = Task { [weak self] in
+            await self?.saveIdea()
+            await self?.performIntakeReflection()
+        }
+    }
+
+    /// User confirmed the brief is captured well enough — proceed to the existing analysis pipeline
+    /// (panel of experts). This is the "Start analysis" gate; once crossed, listening is over.
+    func confirmAndAnalyze() {
+        guard !isAnalyzing else { return }
+        designFailed = false
+        errorMessage = nil
+        isAnalyzing = true
+        analysisStatus = lang.ideaBoard.designPlanningStatus
+        currentTask?.cancel()
+        currentTask = Task { [weak self] in
+            await self?.performAnalysis()
+        }
+    }
+
+    private func performIntakeReflection() async {
+        designFailed = false
+        streamingOutput = ""
+        errorMessage = nil
+
+        await refreshAgents()
+        userProfile = await container.userProfileService.getProfile()
+
+        let prompt = IdeaPromptBuilder.buildIntakeReflectionPrompt(
+            messages: messages,
+            userProfile: userProfile
+        )
+
+        do {
+            try Task.checkCancellation()
+
+            let result = try await runIntakeWithFallback(prompt: prompt) { [weak self] text in
+                Task { @MainActor in
+                    self?.streamingOutput = text
+                }
+            }
+
+            try Task.checkCancellation()
+
+            let parsed = parseIntakeResponse(result.response)
+            let intakeMessage = IdeaMessage(
+                role: .intake,
+                content: parsed.prose,
+                modelName: result.agent.model,
+                fallbackInfo: result.fallbackInfo,
+                intakeJSON: parsed.json.isEmpty ? nil : parsed.json
+            )
+            messages.append(intakeMessage)
+            idea.status = .listening
+            streamingOutput = ""
+            await saveIdea()
+        } catch is CancellationError {
+            idea.status = .listening
+            streamingOutput = ""
+            await saveIdea()
+        } catch {
+            idea.status = .listening
+            designFailed = true
+            errorMessage = lang.ideaBoard.intakeFailedFormat(error.localizedDescription)
+            streamingOutput = ""
+            await saveIdea()
+        }
+
+        isAnalyzing = false
+    }
+
     // MARK: - Send Follow-up Message (Parallel Step Agents)
 
     /// Sends first user message and immediately starts analysis (no separate Analyze button needed).
+    /// Retained for callers/tests that want to bypass the listening gate; the in-app flow now uses
+    /// `sendIdea` + `confirmAndAnalyze` instead.
     func sendAndAnalyze(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isAnalyzing else { return }
@@ -1061,6 +1158,13 @@ final class IdeaDetailViewModel {
             switch message.role {
             case .user:
                 taskParts.append("[User]\n\(message.content)")
+            case .intake:
+                // Preserve the intake reflection so Design can verify its work against the
+                // listened-and-reflected customer intent. Prose summary only — structured
+                // JSON is left out to keep the handoff readable.
+                if !message.content.isEmpty {
+                    taskParts.append("[Intake Reflection]\n\(message.content)")
+                }
             case .design:
                 var section = "[Design Analysis]"
                 if !message.content.isEmpty {
@@ -1445,6 +1549,45 @@ final class IdeaDetailViewModel {
         }
     }
 
+    /// Sibling of `runWithFallback` for the Intake (listening) stage. Shares the exact same
+    /// fallback/tracking pipeline but resolves agents via `resolveIntakeAgents()` so the prompt
+    /// is delivered to a different persona/model than the panel-coordinating Director.
+    private func runIntakeWithFallback(
+        prompt: String,
+        jsonSchema: String? = nil,
+        streamHandler: @Sendable @escaping (String) -> Void
+    ) async throws -> (response: String, agent: Agent, fallbackInfo: String?) {
+        await refreshAgents()
+        let agents = resolveIntakeAgents()
+        guard !agents.isEmpty else {
+            throw IdeaError.noAgent
+        }
+
+        do {
+            let result = try await runWithAgentFallback(
+                agents: agents,
+                runner: container.cliAgentRunner,
+                prompt: prompt,
+                jsonSchema: jsonSchema,
+                projectId: project.id,
+                rootPath: project.rootPath,
+                streamHandler: streamHandler
+            )
+
+            for attempt in result.failedAttempts {
+                trackUsage(promptLength: attempt.promptLength, responseLength: 0)
+            }
+            trackUsage(promptLength: prompt.count, responseLength: result.response.count)
+
+            let fallbackInfo: String? = result.attemptIndex > 0
+                ? "\(agents[0].model) → \(result.agent.model) (primary failed)"
+                : nil
+            return (result.response, result.agent, fallbackInfo)
+        } catch is FallbackRunError {
+            throw IdeaError.noAgent
+        }
+    }
+
     // MARK: - Agent Resolution
 
     private func resolveDesignAgents() -> [Agent] {
@@ -1457,6 +1600,26 @@ final class IdeaDetailViewModel {
                 tier: .director,
                 provider: .claude,
                 model: "claude-sonnet-4-5-20250514"
+            ))
+        }
+        return agents
+    }
+
+    /// Resolve the intake agent list. Priority:
+    /// 1. Enabled `.intake` agents (one or many).
+    /// 2. Enabled `.director` agents as a fallback so users who haven't seeded an intake agent
+    ///    yet still get reflective listening (the director persona will follow the intake prompt).
+    /// 3. Hardcoded Claude Haiku agent if neither exists.
+    private func resolveIntakeAgents() -> [Agent] {
+        var agents: [Agent] = []
+        agents.append(contentsOf: availableAgents.filter { $0.tier == .intake && $0.isEnabled })
+        agents.append(contentsOf: availableAgents.filter { $0.tier == .director && $0.isEnabled })
+        if agents.isEmpty {
+            agents.append(Agent(
+                name: "Intake",
+                tier: .intake,
+                provider: .claude,
+                model: "claude-haiku-4-5"
             ))
         }
         return agents
@@ -1501,6 +1664,53 @@ final class IdeaDetailViewModel {
     }
 
     // MARK: - Response Parsing
+
+    /// Parsed payload from an intake-stage LLM response: prose for chat rendering plus the raw
+    /// JSON to persist on the IdeaMessage for DisclosureGroup rendering and downstream prompts.
+    struct ParsedIntake: Sendable {
+        let prose: String
+        let json: String
+    }
+
+    /// Extract the prose (`summary_prose`) and the JSON payload from an intake reflection response.
+    /// Falls back gracefully: if no JSON is found or it lacks `summary_prose`, the whole response
+    /// is treated as prose so the user still gets something visible.
+    nonisolated static func parseIntakeResponse(_ response: String) -> ParsedIntake {
+        guard let jsonString = extractJSONStatic(from: response),
+              let data = jsonString.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let prose = dict["summary_prose"] as? String,
+              !prose.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return ParsedIntake(prose: response, json: "")
+        }
+        return ParsedIntake(prose: prose, json: jsonString)
+    }
+
+    /// Static counterpart of `extractJSON` so `parseIntakeResponse` can stay nonisolated and
+    /// be unit-testable without a ViewModel instance.
+    private nonisolated static func extractJSONStatic(from text: String) -> String? {
+        if let fenceStart = text.range(of: "```json"),
+           let fenceEnd = text.range(of: "```", range: fenceStart.upperBound..<text.endIndex) {
+            return String(text[fenceStart.upperBound..<fenceEnd.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let fenceStart = text.range(of: "```"),
+           let fenceEnd = text.range(of: "```", range: fenceStart.upperBound..<text.endIndex) {
+            return String(text[fenceStart.upperBound..<fenceEnd.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if let braceStart = text.firstIndex(of: "{"),
+           let braceEnd = text.lastIndex(of: "}") {
+            return String(text[braceStart...braceEnd])
+        }
+        return nil
+    }
+
+    /// Instance accessor so `performIntakeReflection` can reuse the static parser without
+    /// the call site having to know about isolation.
+    private func parseIntakeResponse(_ response: String) -> ParsedIntake {
+        Self.parseIntakeResponse(response)
+    }
 
     private func parsePlanningResponse(_ response: String) -> (content: String, experts: [(name: String, role: String, focus: String, agentId: String?)]) {
         if let jsonString = extractJSON(from: response),
