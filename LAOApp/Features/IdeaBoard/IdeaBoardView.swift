@@ -249,6 +249,8 @@ struct IdeaBoardView: View {
                         .lineLimit(1)
                     Spacer()
                     switch idea.status {
+                    case .listening:
+                        BadgeView(title: lang.ideaBoard.listeningStage, tone: .blue)
                     case .analyzing, .analyzed, .referencing:
                         BadgeView(title: lang.ideaBoard.ideaStage, tone: .blue)
                     case .converted, .designing:

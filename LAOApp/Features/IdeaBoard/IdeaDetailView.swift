@@ -87,6 +87,12 @@ struct IdeaDetailView: View {
 
             Divider()
 
+            // Intake CTA banner — shown after a reflection is rendered, while still in the
+            // listening stage. Clicking "Start analysis" crosses the gate into expert panel.
+            if canStartAnalysis {
+                intakeCtaBanner
+            }
+
             // Synthesis CTA banner — shown whenever expert round is done and not analyzing
             if hasCompletedExpertRound && !viewModel.isAnalyzing {
                 synthesisCtaBanner
@@ -117,6 +123,8 @@ struct IdeaDetailView: View {
         switch message.role {
         case .user:
             userNode(message)
+        case .intake:
+            intakeBubble(message)
         case .design:
             if message.summary != nil {
                 // Synthesis is a standalone conclusion — no tree rail
@@ -669,6 +677,138 @@ struct IdeaDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // MARK: - Intake Bubble (listening / first-meeting reflection)
+
+    private struct IntakeOpenQuestion: Decodable {
+        let question: String
+        let why: String?
+    }
+
+    private struct IntakeStructured: Decodable {
+        let understood: [String]?
+        let ambiguous: [String]?
+        let open_questions: [IntakeOpenQuestion]?
+    }
+
+    @State private var expandedIntakeIds: Set<UUID> = []
+
+    private func decodeIntake(_ json: String?) -> IntakeStructured? {
+        guard let json, let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(IntakeStructured.self, from: data)
+    }
+
+    private func intakeBubble(_ message: IdeaMessage) -> some View {
+        let structured = decodeIntake(message.intakeJSON)
+        let isExpanded = expandedIntakeIds.contains(message.id)
+        let hasStructured = structured.map { ($0.understood?.isEmpty == false) ||
+                                              ($0.ambiguous?.isEmpty == false) ||
+                                              ($0.open_questions?.isEmpty == false) } ?? false
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "ear")
+                    .font(AppTheme.Typography.caption)
+                    .foregroundStyle(theme.accentPrimary)
+                Text(lang.ideaBoard.listeningStage)
+                    .font(AppTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(theme.accentPrimary)
+                Text(messageTimestamp(message.createdAt))
+                    .font(AppTheme.Typography.detail)
+                    .foregroundStyle(theme.foregroundMuted)
+                Spacer()
+                if let modelName = message.modelName {
+                    if let fallback = message.fallbackInfo {
+                        Text(modelName)
+                            .font(AppTheme.Typography.detail)
+                            .foregroundStyle(.orange)
+                            .help(fallback)
+                    } else {
+                        Text(modelName)
+                            .font(AppTheme.Typography.detail)
+                            .foregroundStyle(theme.foregroundMuted)
+                    }
+                }
+            }
+
+            Text(message.content)
+                .font(AppTheme.Typography.body)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            if hasStructured, let s = structured {
+                Button {
+                    if isExpanded {
+                        expandedIntakeIds.remove(message.id)
+                    } else {
+                        expandedIntakeIds.insert(message.id)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(AppTheme.Typography.detail)
+                        Text(isExpanded ? lang.design.showLess : lang.design.showMore)
+                            .font(AppTheme.Typography.detail)
+                    }
+                    .foregroundStyle(theme.foregroundSecondary)
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 10) {
+                        intakeSection(title: lang.ideaBoard.intakeUnderstood,
+                                       bullets: s.understood ?? [])
+                        intakeSection(title: lang.ideaBoard.intakeAmbiguous,
+                                       bullets: s.ambiguous ?? [])
+                        if let questions = s.open_questions, !questions.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(lang.ideaBoard.intakeOpenQuestions)
+                                    .font(AppTheme.Typography.caption.weight(.semibold))
+                                    .foregroundStyle(theme.foregroundSecondary)
+                                ForEach(Array(questions.enumerated()), id: \.offset) { _, q in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("• \(q.question)")
+                                            .font(AppTheme.Typography.label)
+                                        if let why = q.why, !why.isEmpty {
+                                            Text(why)
+                                                .font(AppTheme.Typography.detail)
+                                                .foregroundStyle(theme.foregroundSecondary)
+                                                .padding(.leading, 12)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(10)
+                    .background(theme.surfaceSubtle)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.small))
+                }
+            }
+        }
+        .padding(16)
+        .background(theme.accentPrimary.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.Radius.medium))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.Radius.medium)
+                .stroke(theme.accentPrimary.opacity(0.18), lineWidth: 1)
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func intakeSection(title: String, bullets: [String]) -> some View {
+        if !bullets.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(AppTheme.Typography.caption.weight(.semibold))
+                    .foregroundStyle(theme.foregroundSecondary)
+                ForEach(Array(bullets.enumerated()), id: \.offset) { _, line in
+                    Text("• \(line)")
+                        .font(AppTheme.Typography.label)
+                }
+            }
+        }
+    }
+
     // MARK: - Design Bubbles
 
     private func designBubble(_ message: IdeaMessage) -> some View {
@@ -944,7 +1084,7 @@ struct IdeaDetailView: View {
                 .help(lang.ideaBoard.attachFileHelp)
 
                 TextField(
-                    viewModel.messages.isEmpty ? lang.ideaBoard.describeIdeaPlaceholder : lang.ideaBoard.askExpertsPlaceholder,
+                    inputPlaceholder,
                     text: $inputText,
                     axis: .vertical
                 )
@@ -1009,6 +1149,23 @@ struct IdeaDetailView: View {
         !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !viewModel.isAnalyzing
     }
 
+    /// Placeholder routing for the chat input. Three states:
+    /// - empty (no messages yet): prompt the client to describe the idea
+    /// - listening (intake stage, no panel yet): invite anything else they want to add
+    /// - panel exists: ask the experts (existing behaviour)
+    private var inputPlaceholder: String {
+        if viewModel.messages.isEmpty {
+            return lang.ideaBoard.describeIdeaPlaceholder
+        }
+        let hasExpertPanel = viewModel.messages.contains {
+            $0.role == .design && ($0.experts?.isEmpty == false)
+        }
+        if hasExpertPanel {
+            return lang.ideaBoard.askExpertsPlaceholder
+        }
+        return lang.ideaBoard.addToIdeaPlaceholder
+    }
+
     private var hasCompletedExpertRound: Bool {
         viewModel.messages.contains {
             $0.role == .design && ($0.experts?.contains { !$0.isLoading } ?? false)
@@ -1019,6 +1176,46 @@ struct IdeaDetailView: View {
         let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
         let range = NSRange(inputText.startIndex..., in: inputText)
         return detector?.firstMatch(in: inputText, range: range) != nil
+    }
+
+    // MARK: - Intake CTA Banner (Start analysis gate)
+
+    /// True when the listening stage is in a "ready to proceed" state: status is .listening,
+    /// the most recent message is the intake reflection, no panel has been built yet, and we are
+    /// not mid-analysis. The user can also choose to keep typing — the banner is purely additive.
+    private var canStartAnalysis: Bool {
+        guard viewModel.idea.status == .listening,
+              !viewModel.isAnalyzing,
+              let lastMessage = viewModel.messages.last,
+              lastMessage.role == .intake else { return false }
+        let hasExpertPanel = viewModel.messages.contains {
+            $0.role == .design && ($0.experts?.isEmpty == false)
+        }
+        return !hasExpertPanel
+    }
+
+    private var intakeCtaBanner: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(lang.ideaBoard.startAnalysisButton)
+                    .font(AppTheme.Typography.label.weight(.semibold))
+                Text(lang.ideaBoard.intakeReadyHint)
+                    .font(AppTheme.Typography.caption)
+                    .foregroundStyle(theme.foregroundSecondary)
+                    .lineLimit(2)
+            }
+            Spacer()
+            Button {
+                viewModel.confirmAndAnalyze()
+            } label: {
+                Label(lang.ideaBoard.startAnalysisButton, systemImage: "arrow.right.circle.fill")
+                    .font(AppTheme.Typography.label.weight(.medium))
+            }
+            .buttonStyle(PrimaryActionButtonStyle())
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
+        .background(theme.accentPrimary.opacity(0.06))
     }
 
     // MARK: - Synthesis CTA Banner
@@ -1094,9 +1291,12 @@ struct IdeaDetailView: View {
             $0.role == .design && ($0.experts?.isEmpty == false)
         }
         if hasExpertPanel {
+            // Panel exists → existing expert follow-up flow.
             viewModel.sendMessage(text)
         } else {
-            viewModel.sendAndAnalyze(text)
+            // Pre-panel (draft or listening) → intake reflection. Analysis only starts
+            // when the user explicitly clicks "Start analysis".
+            viewModel.sendIdea(text)
         }
     }
 
