@@ -59,6 +59,7 @@ public enum AgentRole: String, Codable, Sendable, CaseIterable, Identifiable {
 public enum AgentTier: String, Codable, Sendable, CaseIterable, Identifiable {
     case director
     case directorFallback
+    case intake
     case step
 
     public var id: String { rawValue }
@@ -67,6 +68,7 @@ public enum AgentTier: String, Codable, Sendable, CaseIterable, Identifiable {
         switch self {
         case .director: return "Director"
         case .directorFallback: return "Fallback"
+        case .intake: return "Intake"
         case .step: return "Step"
         }
     }
@@ -312,6 +314,7 @@ public struct DesignSession: Identifiable, Hashable, Codable, Sendable {
 
 public enum IdeaStatus: String, Codable, Sendable, CaseIterable {
     case draft
+    case listening      // intake reflection: AI is listening to the customer's idea before any analysis
     case analyzing
     case analyzed
     case referencing    // unified reference anchor curation phase
