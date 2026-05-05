@@ -86,11 +86,14 @@ public final class DefaultAgentSeeder: @unchecked Sendable {
             available.append(providerModelMap[0].models)  // Claude as default
         }
 
-        // Create tier-based agents: Design (top) + Fallback (mid) + Step agents
+        // Create tier-based agents: Design (top) + Fallback (mid) + Intake (light) + Step agents
+        // Intake uses `light` tier: reflective summary needs little reasoning, may run frequently,
+        // and `mid` is reserved for the director fallback.
         let primary = available[0]
         var results: [CLIEntry] = [
             CLIEntry(provider: primary.provider, name: "Director", tier: .director, model: primary.model(for: .top)),
             CLIEntry(provider: primary.provider, name: "Fallback", tier: .directorFallback, model: primary.model(for: .mid)),
+            CLIEntry(provider: primary.provider, name: "Intake", tier: .intake, model: primary.model(for: .light)),
         ]
 
         // Provider-specific expertise descriptions for Design agent assignment
