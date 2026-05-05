@@ -5,6 +5,7 @@ import Foundation
 enum IdeaMessageRole: String, Codable {
     case user
     case design = "director"
+    case intake
 }
 
 struct IdeaMessage: Identifiable, Codable {
@@ -28,6 +29,10 @@ struct IdeaMessage: Identifiable, Codable {
     /// Distinct from `unifiedReferencesJSON` which is the optional parsed payload — this flag
     /// survives parsing failures so chat routing and overlay queries stay consistent.
     var isReferencePhase: Bool?
+    /// Intake reflection structured payload (understood / ambiguous / open_questions).
+    /// The conversational summary lives in `content`; this carries the structured part for
+    /// DisclosureGroup rendering and downstream prompt context. Set only on role==.intake.
+    var intakeJSON: String?
 
     init(
         id: UUID = UUID(),
@@ -42,7 +47,8 @@ struct IdeaMessage: Identifiable, Codable {
         graphJSON: String? = nil,
         unifiedReferencesJSON: String? = nil,
         referenceFeedback: String? = nil,
-        isReferencePhase: Bool? = nil
+        isReferencePhase: Bool? = nil,
+        intakeJSON: String? = nil
     ) {
         self.id = id
         self.role = role
@@ -57,6 +63,7 @@ struct IdeaMessage: Identifiable, Codable {
         self.unifiedReferencesJSON = unifiedReferencesJSON
         self.referenceFeedback = referenceFeedback
         self.isReferencePhase = isReferencePhase
+        self.intakeJSON = intakeJSON
     }
 }
 
