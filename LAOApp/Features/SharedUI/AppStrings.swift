@@ -503,11 +503,22 @@ struct AppStrings: @unchecked Sendable {
         let noIdeasDescription: String
         let newIdeaDefaultTitle: String
         let ideaStage: String
+        let listeningStage: String
         let designStage: String
         let designComplete: String
         let designFailed: String
         let createFailed: String
         let deleteFailed: String
+
+        // Intake (listening) phase
+        let intakeReflectingStatus: String
+        let intakeFailedFormat: (String) -> String
+        let startAnalysisButton: String
+        let intakeReadyHint: String
+        let addToIdeaPlaceholder: String
+        let intakeUnderstood: String
+        let intakeAmbiguous: String
+        let intakeOpenQuestions: String
 
         // Filters
         let filterAll: String
@@ -723,6 +734,7 @@ struct AppStrings: @unchecked Sendable {
         let instructionPlaceholder: String
         let designTierDesc: String
         let fallbackTierDesc: String
+        let intakeTierDesc: String
         let stepTierDesc: String
         let createFailed: String
         let updateFailed: String
@@ -1174,11 +1186,20 @@ extension AppStrings {
             noIdeasDescription: "Create an idea to brainstorm with AI expert panels.",
             newIdeaDefaultTitle: "New Idea",
             ideaStage: "Idea Stage",
+            listeningStage: "Listening",
             designStage: "Design Stage",
             designComplete: "Design Complete",
             designFailed: "Design Failed",
             createFailed: "Failed to create idea",
             deleteFailed: "Failed to delete idea",
+            intakeReflectingStatus: "Reflecting on your idea...",
+            intakeFailedFormat: { reason in "Couldn't reflect on the idea: \(reason)" },
+            startAnalysisButton: "Start analysis",
+            intakeReadyHint: "Add anything you'd like, or start the analysis when ready.",
+            addToIdeaPlaceholder: "Anything else to add?",
+            intakeUnderstood: "What I understood",
+            intakeAmbiguous: "Where I'm not sure",
+            intakeOpenQuestions: "Questions for you",
             filterAll: "All",
             filterDraft: "Draft",
             filterIdeaStage: "Idea Stage",
@@ -1355,6 +1376,7 @@ extension AppStrings {
             instructionPlaceholder: "e.g. Frontend specialist, strong at React UI and responsive design",
             designTierDesc: "Primary orchestrator that plans, delegates, and coordinates design.",
             fallbackTierDesc: "Backup director used when the primary director is unavailable.",
+            intakeTierDesc: "Listens to the customer's idea and reflects it back as a structured summary, before any analysis.",
             stepTierDesc: "Executes individual design steps assigned by the director.",
             createFailed: "Failed to create agent",
             updateFailed: "Failed to update agent",
@@ -1802,11 +1824,20 @@ extension AppStrings {
             noIdeasDescription: "아이디어를 생성하여 AI 전문가 패널과 브레인스토밍하세요.",
             newIdeaDefaultTitle: "새 아이디어",
             ideaStage: "아이디어 단계",
+            listeningStage: "듣는 중",
             designStage: "설계 단계",
             designComplete: "설계 완료",
             designFailed: "설계 실패",
             createFailed: "아이디어 생성에 실패했습니다",
             deleteFailed: "아이디어 삭제에 실패했습니다",
+            intakeReflectingStatus: "아이디어 정리 중...",
+            intakeFailedFormat: { reason in "아이디어 정리에 실패했습니다: \(reason)" },
+            startAnalysisButton: "분석 시작",
+            intakeReadyHint: "더 보태셔도 되고, 충분하시면 분석을 시작하세요.",
+            addToIdeaPlaceholder: "더 보태실 부분이 있나요?",
+            intakeUnderstood: "이해한 내용",
+            intakeAmbiguous: "확인이 필요한 부분",
+            intakeOpenQuestions: "더 듣고 싶은 부분",
             filterAll: "전체",
             filterDraft: "초안",
             filterIdeaStage: "아이디어 단계",
@@ -1983,6 +2014,7 @@ extension AppStrings {
             instructionPlaceholder: "예: 프론트엔드 전문가, React UI와 반응형 디자인에 강함",
             designTierDesc: "설계를 계획, 위임, 조율하는 주 오케스트레이터.",
             fallbackTierDesc: "주 디렉터가 사용 불가할 때 사용되는 백업 디렉터.",
+            intakeTierDesc: "분석 이전에 고객의 아이디어를 듣고 구조화된 요약으로 반영해주는 역할.",
             stepTierDesc: "디렉터가 할당한 개별 설계 스텝을 실행.",
             createFailed: "에이전트 생성 실패",
             updateFailed: "에이전트 업데이트 실패",
