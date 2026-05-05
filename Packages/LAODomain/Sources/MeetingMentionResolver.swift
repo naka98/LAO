@@ -319,6 +319,8 @@ private struct MentionAliasIndex {
             return ["Director", "PM", "디렉터", "매니저"]
         case .directorFallback:
             return ["Fallback", "폴백"]
+        case .intake:
+            return ["Intake", "Listener", "인테이크"]
         case .step:
             return ["Step", "Worker", "스텝"]
         }

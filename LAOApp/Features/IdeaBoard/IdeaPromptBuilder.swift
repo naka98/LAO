@@ -55,6 +55,159 @@ enum IdeaPromptBuilder {
         """
     }
 
+    /// Prompt for the Intake agent to listen and reflect a customer's idea back as a structured summary.
+    /// This runs BEFORE any analysis — no panel of experts, no product direction, no recommendations.
+    /// The goal mirrors the first meeting at a professional design office: hear the client out, reflect
+    /// what was understood, surface ambiguities, and ask a few open questions to deepen the brief.
+    /// - Called by: `IdeaDetailViewModel.performIntakeReflection()`
+    /// - Output: JSON with `summary_prose` + `understood` + `ambiguous` + `open_questions`
+    static func buildIntakeReflectionPrompt(
+        messages: [IdeaMessage],
+        userProfile: UserProfile = UserProfile()
+    ) -> String {
+        // Build a transcript of what the client has said so far (and any prior intake reflections).
+        let transcript = buildIntakeTranscript(from: messages)
+
+        return """
+        \(PromptFragments.designOfficeIdentity)\(PromptFragments.userContext(userProfile))
+
+        You are the Intake desk at the design office — the first ear that meets the client. \
+        Your single job at this stage is to LISTEN and REFLECT, not to design.
+
+        ## What you must NOT do
+        - Do NOT propose directions, MVPs, architectures, or features.
+        - Do NOT assemble a panel of experts.
+        - Do NOT pick technologies or recommend tools.
+        - Do NOT close ambiguity by guessing — name it as ambiguous instead.
+
+        ## What you must do
+        - Reflect back the client's idea in your own words so they feel heard.
+        - Separate what you clearly understood from what is still ambiguous.
+        - Ask 1–3 open-ended questions that would deepen the brief — never narrowing yes/no questions.
+        - Keep the tone warm and professional, like a senior architect at the first meeting.
+
+        ## Conversation so far
+        \(transcript)
+
+        ## Important
+        - \(PromptFragments.respondInSameLanguage(as: "the client's messages above"))
+        - Respond with ONLY valid JSON, no markdown fences, no extra prose outside the JSON.
+        - Use the exact format below:
+
+        {
+          "summary_prose": "1–2 paragraphs of natural prose. Open with something like 'So if I'm hearing you right, ...'. Reflect the idea back, then note what stood out and what you'd like to hear more about. Keep it conversational.",
+          "understood": [
+            "A short bullet stating one thing you clearly understood from the client."
+          ],
+          "ambiguous": [
+            "A short bullet naming a part that could be interpreted in more than one way — without resolving it."
+          ],
+          "open_questions": [
+            {
+              "question": "An open-ended question that would deepen the brief.",
+              "why": "Optional — one short line on why this matters."
+            }
+          ]
+        }
+        """
+    }
+
+    // MARK: - Analysis Idea Body (panel hand-off)
+
+    private struct IntakeOpenQuestionPayload: Decodable {
+        let question: String
+        let why: String?
+    }
+
+    private struct IntakeReflectionPayload: Decodable {
+        let understood: [String]?
+        let ambiguous: [String]?
+        let open_questions: [IntakeOpenQuestionPayload]?
+    }
+
+    /// Build the `ideaBody` string used by the panel-construction prompt and every Step Agent's
+    /// initial analysis prompt. Aggregates everything captured during the listening stage so the
+    /// downstream LLMs work from the full brief instead of just the client's first sentence.
+    ///
+    /// Sections (only included when present, in this order):
+    /// 1. Original idea — the client's first user message.
+    /// 2. Additional context — any subsequent user messages added during listening.
+    /// 3. Reflection from intake — the latest intake message's prose summary plus its structured
+    ///    `understood` / `ambiguous` / `open_questions` payload, expanded into readable bullets.
+    ///
+    /// Falls back gracefully: if `messages` has no user message and no intake, returns "".
+    static func buildAnalysisIdeaBody(from messages: [IdeaMessage]) -> String {
+        let userMessages = messages.filter { $0.role == .user }
+        let latestIntake = messages.last { $0.role == .intake }
+
+        var sections: [String] = []
+
+        if let first = userMessages.first {
+            sections.append("### Original idea (from the client)\n\(first.content)")
+        }
+
+        if userMessages.count > 1 {
+            let additions = userMessages.dropFirst().enumerated().map { index, msg in
+                "\(index + 1). \(msg.content)"
+            }.joined(separator: "\n")
+            sections.append("### Additional context provided by the client\n\(additions)")
+        }
+
+        if let intake = latestIntake {
+            var lines: [String] = ["### Reflection from intake (your design office's listening notes)"]
+            if !intake.content.isEmpty {
+                lines.append(intake.content)
+            }
+            if let json = intake.intakeJSON,
+               let data = json.data(using: .utf8),
+               let payload = try? JSONDecoder().decode(IntakeReflectionPayload.self, from: data) {
+                if let understood = payload.understood, !understood.isEmpty {
+                    lines.append("**What was clearly understood:**")
+                    lines.append(contentsOf: understood.map { "- \($0)" })
+                }
+                if let ambiguous = payload.ambiguous, !ambiguous.isEmpty {
+                    lines.append("**Where the brief is still ambiguous:**")
+                    lines.append(contentsOf: ambiguous.map { "- \($0)" })
+                }
+                if let questions = payload.open_questions, !questions.isEmpty {
+                    lines.append("**Open questions raised during intake:**")
+                    for q in questions {
+                        if let why = q.why, !why.isEmpty {
+                            lines.append("- \(q.question) (rationale: \(why))")
+                        } else {
+                            lines.append("- \(q.question)")
+                        }
+                    }
+                }
+            }
+            sections.append(lines.joined(separator: "\n"))
+        }
+
+        return sections.joined(separator: "\n\n")
+    }
+
+    /// Compact transcript of the conversation so far for intake reflection.
+    /// Mirrors `buildThreadSummary` but stays light: client messages verbatim, prior intake
+    /// reflections as prose only (no nested JSON), and design/expert outputs are skipped because
+    /// the intake stage runs before any of that exists.
+    private static func buildIntakeTranscript(from messages: [IdeaMessage]) -> String {
+        var lines: [String] = []
+        for message in messages {
+            switch message.role {
+            case .user:
+                lines.append("[Client]: \(message.content)")
+            case .intake:
+                if !message.content.isEmpty {
+                    lines.append("[Intake (you, earlier)]: \(message.content.prefix(500))")
+                }
+            case .design:
+                // Should not occur during the intake stage, but skip defensively.
+                continue
+            }
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
     /// Prompt for a single expert to propose a concrete product direction (run as Step Agent).
     /// - Output: Plain text proposal (2-4 paragraphs) + optional ```entities``` JSON block
     static func buildExpertInitialAnalysisPrompt(
@@ -317,6 +470,11 @@ enum IdeaPromptBuilder {
             } else if !message.content.isEmpty {
                 lines.append("[Design]: \(message.content.prefix(200))...")
             }
+        case .intake:
+            // Intake reflection — prose only, no structured JSON, to keep prompt context light.
+            if !message.content.isEmpty {
+                lines.append("[Intake]: \(message.content.prefix(300))")
+            }
         }
     }
 
@@ -541,6 +699,11 @@ enum IdeaPromptBuilder {
                     }
                 } else if !message.content.isEmpty {
                     lines.append("[Design]: \(message.content.prefix(300))")
+                }
+            case .intake:
+                // Intake reflection — prose only; structured JSON is omitted to bound prompt size.
+                if !message.content.isEmpty {
+                    lines.append("[Intake]: \(message.content.prefix(500))")
                 }
             }
         }

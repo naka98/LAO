@@ -322,6 +322,7 @@ struct AgentsTabView: View {
         switch tier {
         case .director: .blue
         case .directorFallback: .neutral
+        case .intake: .purple
         case .step: .green
         }
     }
@@ -330,6 +331,7 @@ struct AgentsTabView: View {
         switch tier {
         case .director: lang.agents.designTierDesc
         case .directorFallback: lang.agents.fallbackTierDesc
+        case .intake: lang.agents.intakeTierDesc
         case .step: lang.agents.stepTierDesc
         }
     }
