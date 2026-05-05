@@ -767,7 +767,7 @@ final class DesignWorkflowViewModel {
 
         workflow = wf
         syncToRequest()
-        logEvent("approach_confirmed", payload: [
+        logEvent(DesignEventType.approachConfirmed, payload: [
             "approachId": approach.id.uuidString,
             "label": approach.label,
         ])
@@ -2023,6 +2023,8 @@ final class DesignWorkflowViewModel {
     /// Set the decision-maker's verdict for multiple items at once.
     func setDesignVerdictBatch(_ itemIds: [UUID], _ verdict: DesignVerdict) {
         guard var wf = workflow else { return }
+        var oscillationLogs: [(itemId: UUID, name: String, flipCount: Int)] = []
+        var verdictLogs: [(itemId: UUID, from: DesignVerdict?)] = []
         for itemId in itemIds {
             let previousVerdict = wf.findItem(byId: itemId)?.item.designVerdict
             wf.updateItem(itemId) { item in
@@ -2039,8 +2041,28 @@ final class DesignWorkflowViewModel {
                 case .excluded:      item.plannerVerdict = .rejected
                 }
             }
+            verdictLogs.append((itemId, previousVerdict))
+            if let item = wf.findItem(byId: itemId)?.item,
+               item.verdictFlipCount >= 2,
+               previousVerdict == .confirmed && verdict == .needsRevision {
+                oscillationLogs.append((itemId, item.name, item.verdictFlipCount))
+            }
         }
         workflow = wf
+        for entry in verdictLogs {
+            logEvent(DesignEventType.verdictChanged, payload: [
+                "itemId": entry.itemId.uuidString,
+                "from": entry.from?.rawValue ?? "nil",
+                "to": verdict.rawValue,
+            ])
+        }
+        for entry in oscillationLogs {
+            logEvent(DesignEventType.convergenceOscillation, payload: [
+                "itemId": entry.itemId.uuidString,
+                "itemName": entry.name,
+                "flipCount": entry.flipCount,
+            ])
+        }
         syncToRequest()
         if workflow?.allItemsConfirmed == true { shouldPromptCompletion = true }
     }
@@ -2055,7 +2077,7 @@ final class DesignWorkflowViewModel {
         let events = await container.designEventService.listEvents(sessionId: reqId, limit: 200, offset: 0)
         let decisionTypes: Set<String> = [
             DesignEventType.verdictChanged,
-            "approach_selected",
+            DesignEventType.approachConfirmed,
             DesignEventType.uncertaintyResolved,
             DesignEventType.uncertaintyDismissed,
         ]
@@ -2074,15 +2096,15 @@ final class DesignWorkflowViewModel {
                         ? "\(lang.design.verdictConfirmed): \(itemName)"
                         : "\(lang.design.verdictNeedsRevision): \(itemName)"
                     return DecisionHistoryEntry(id: event.id, timestamp: event.createdAt, category: cat, summary: summary, relatedItemId: itemId)
-                case "approach_selected":
+                case DesignEventType.approachConfirmed:
                     let label = payload?["label"] as? String ?? ""
                     return DecisionHistoryEntry(id: event.id, timestamp: event.createdAt, category: .approachSelected, summary: label, relatedItemId: nil)
                 case DesignEventType.uncertaintyResolved:
-                    let desc = payload?["description"] as? String ?? ""
-                    return DecisionHistoryEntry(id: event.id, timestamp: event.createdAt, category: .uncertaintyResolved, summary: desc, relatedItemId: nil)
+                    let summary = uncertaintySummary(from: payload, fallback: lang.design.uncertaintyResolutionComplete)
+                    return DecisionHistoryEntry(id: event.id, timestamp: event.createdAt, category: .uncertaintyResolved, summary: summary, relatedItemId: nil)
                 case DesignEventType.uncertaintyDismissed:
-                    let desc = payload?["description"] as? String ?? ""
-                    return DecisionHistoryEntry(id: event.id, timestamp: event.createdAt, category: .uncertaintyDismissed, summary: desc, relatedItemId: nil)
+                    let summary = uncertaintySummary(from: payload, fallback: lang.design.uncertaintyDismiss)
+                    return DecisionHistoryEntry(id: event.id, timestamp: event.createdAt, category: .uncertaintyDismissed, summary: summary, relatedItemId: nil)
                 default:
                     return nil
                 }
@@ -2093,6 +2115,21 @@ final class DesignWorkflowViewModel {
     private func parsePayload(_ json: String?) -> [String: Any]? {
         guard let json, let data = json.data(using: .utf8) else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    /// Build a human-readable summary string for an uncertainty event payload, handling
+    /// both the new (title + description) and legacy (selectedOption / response only) shapes.
+    private func uncertaintySummary(from payload: [String: Any]?, fallback: String) -> String {
+        if let desc = payload?["description"] as? String, !desc.isEmpty { return desc }
+        let title = (payload?["title"] as? String) ?? ""
+        if let option = payload?["selectedOption"] as? String, !option.isEmpty {
+            return title.isEmpty ? option : "\(title): \(option)"
+        }
+        if let response = payload?["response"] as? String, !response.isEmpty {
+            return title.isEmpty ? response : "\(title): \(response)"
+        }
+        if !title.isEmpty { return title }
+        return fallback
     }
 
     /// Remove an item (sets internal rejected state, resets director verdict).
@@ -2176,10 +2213,12 @@ final class DesignWorkflowViewModel {
 
     /// Resolve an uncertainty with a selected option (for suggestion type).
     func resolveUncertainty(_ id: UUID, selectedOption: String) {
+        var title = ""
         workflow?.resolveUncertainty(id) { decision in
             decision.status = .approved
             decision.selectedOption = selectedOption
             decision.resolvedAt = Date()
+            title = decision.title
         }
 
         // Inject resolution into chat context
@@ -2191,7 +2230,9 @@ final class DesignWorkflowViewModel {
 
         logEvent(DesignEventType.uncertaintyResolved, payload: [
             "uncertaintyId": id.uuidString,
+            "title": title,
             "selectedOption": selectedOption,
+            "description": title.isEmpty ? selectedOption : "\(title): \(selectedOption)",
         ])
         syncToRequest()
         if workflow?.allItemsConfirmed == true { shouldPromptCompletion = true }
@@ -2213,9 +2254,12 @@ final class DesignWorkflowViewModel {
         )
         workflow?.appendChatMessage(designMsg)
 
+        let trimmedResponse = String(response.prefix(200))
         logEvent(DesignEventType.uncertaintyResolved, payload: [
             "uncertaintyId": id.uuidString,
-            "response": String(response.prefix(200)),
+            "title": title,
+            "response": trimmedResponse,
+            "description": title.isEmpty ? trimmedResponse : "\(title): \(trimmedResponse)",
         ])
         syncToRequest()
         if workflow?.allItemsConfirmed == true { shouldPromptCompletion = true }
@@ -2223,12 +2267,16 @@ final class DesignWorkflowViewModel {
 
     /// Dismiss an advisory uncertainty.
     func dismissUncertainty(_ id: UUID) {
+        var title = ""
         workflow?.resolveUncertainty(id) { decision in
             decision.status = .rejected
             decision.resolvedAt = Date()
+            title = decision.title
         }
         logEvent(DesignEventType.uncertaintyDismissed, payload: [
             "uncertaintyId": id.uuidString,
+            "title": title,
+            "description": title,
         ])
         syncToRequest()
         if workflow?.allItemsConfirmed == true { shouldPromptCompletion = true }
