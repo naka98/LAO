@@ -2314,10 +2314,16 @@ enum DesignJSONSchemas {
     {"type":"object","properties":{"issues":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"severity":{"type":"string"},"category":{"type":"string"},"description":{"type":"string"},"affectedItems":{"type":"array","items":{"type":"string"}},"suggestedFix":{"type":"string"}},"required":["id","severity","category","description","affectedItems","suggestedFix"],"additionalProperties":false}},"summary":{"type":"string"}},"required":["issues","summary"],"additionalProperties":false}
     """
 
-    /// Schema for DesignChatResponse
-    /// Omits: action.changes (untyped object incompatible with strict mode)
+    /// Schema for DesignChatResponse.
+    /// OpenAI structured-output strict mode requires `required` to list every key in
+    /// `properties` and `additionalProperties:false`. To express "field present but value
+    /// optional", use null unions (`{"type":["string","null"]}`) — the model fills `type`
+    /// plus only the fields relevant to that action type, and passes null for the rest.
+    /// Per-type validation lives in DesignAction.from(json:); the schema is just shape.
+    /// Omits: action.changes (untyped object incompatible with strict mode) — flat
+    /// itemName/body fields are reconstructed into changes by DesignAction.from(json:).
     static let chat = """
-    {"type":"object","properties":{"message":{"type":"string"},"actions":{"type":"array","items":{"type":"object","properties":{"type":{"type":"string"},"sectionType":{"type":"string"},"itemId":{"type":"string"},"itemName":{"type":"string"},"sectionLabel":{"type":"string"},"items":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"briefDescription":{"type":"string"}},"required":["name","briefDescription"],"additionalProperties":false}},"agentId":{"type":"string"},"sourceItemId":{"type":"string"},"targetItemId":{"type":"string"},"relationType":{"type":"string"},"uncertaintyType":{"type":"string"},"priority":{"type":"string"},"title":{"type":"string"},"body":{"type":"string"},"options":{"type":"array","items":{"type":"string"}},"triggeredBy":{"type":"string"}},"required":["type","sectionType","itemId","itemName","sectionLabel","items","agentId","sourceItemId","targetItemId","relationType","uncertaintyType","priority","title","body","options","triggeredBy"],"additionalProperties":false}}},"required":["message","actions"],"additionalProperties":false}
+    {"type":"object","properties":{"message":{"type":"string"},"actions":{"type":["array","null"],"items":{"type":"object","properties":{"type":{"type":"string"},"sectionType":{"type":["string","null"]},"itemId":{"type":["string","null"]},"itemName":{"type":["string","null"]},"sectionLabel":{"type":["string","null"]},"items":{"type":["array","null"],"items":{"type":"object","properties":{"name":{"type":"string"},"briefDescription":{"type":"string"}},"required":["name","briefDescription"],"additionalProperties":false}},"agentId":{"type":["string","null"]},"sourceItemId":{"type":["string","null"]},"targetItemId":{"type":["string","null"]},"relationType":{"type":["string","null"]},"uncertaintyType":{"type":["string","null"]},"priority":{"type":["string","null"]},"title":{"type":["string","null"]},"body":{"type":["string","null"]},"options":{"type":["array","null"],"items":{"type":"string"}},"triggeredBy":{"type":["string","null"]}},"required":["type","sectionType","itemId","itemName","sectionLabel","items","agentId","sourceItemId","targetItemId","relationType","uncertaintyType","priority","title","body","options","triggeredBy"],"additionalProperties":false}}},"required":["message","actions"],"additionalProperties":false}
     """
 
     /// Schema for triage results

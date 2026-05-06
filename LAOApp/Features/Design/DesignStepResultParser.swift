@@ -564,6 +564,8 @@ enum DesignStepResultParser {
                 return try plainDecoder.decode(type, from: data)
             } catch {
                 parserLog.warning("Decode \(String(describing: type), privacy: .public) all strategies failed — last error: \(String(describing: error), privacy: .public)")
+                let head = String(jsonString.prefix(200))
+                parserLog.warning("Decode \(String(describing: type), privacy: .public) input head: len=\(jsonString.count, privacy: .public) prefix=\(head, privacy: .public)")
             }
         }
 
