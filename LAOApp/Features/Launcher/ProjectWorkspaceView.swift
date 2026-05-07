@@ -13,6 +13,7 @@ struct ProjectWorkspaceView: View {
     @StateObject private var viewModel: ProjectWorkspaceViewModel
     @State private var isBootstrapping = true
     @State private var showCloseConfirmation = false
+    @State private var closeConfirmed = false
 
     @Environment(\.theme) private var theme
     @Environment(\.lang) private var lang
@@ -75,7 +76,7 @@ struct ProjectWorkspaceView: View {
         ))
         .background(
             WindowCloseGuard(
-                shouldPreventClose: { hasActiveWorkflow },
+                shouldPreventClose: { hasActiveWorkflow && !closeConfirmed },
                 onCloseAttempt: { showCloseConfirmation = true },
                 onWindowClose: {
                     container.activeWorkflowCoordinator.openProjectWindowIds.remove(viewModel.projectId)
@@ -92,9 +93,8 @@ struct ProjectWorkspaceView: View {
             titleVisibility: .visible
         ) {
             Button(lang.root.closeAnywayButton, role: .destructive) {
-                // Workflow continues in the background via ActiveWorkflowCoordinator.
-                // Force-close the window.
-                NSApp.keyWindow?.close()
+                closeConfirmed = true
+                closeOwnWindow()
             }
             Button(lang.common.cancel, role: .cancel) { }
         } message: {

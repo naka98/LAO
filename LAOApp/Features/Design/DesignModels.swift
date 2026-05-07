@@ -1959,29 +1959,37 @@ enum DesignAction {
         }
     }
 
-    /// Human-readable description for display in revision review overlay.
-    var displayDescription: String {
+    /// Human-readable description for display in revision/consistency/uncertainty overlays.
+    /// Resolves item UUIDs to their workflow names so the user can distinguish multi-item actions.
+    /// Falls back to the first 8 chars of the UUID when the workflow is unavailable or the lookup fails.
+    func displayDescription(in workflow: DesignWorkflow?) -> String {
         switch self {
         case .elaborateItem(_, let itemId, _):
-            return "Re-elaborate item \(itemId.uuidString.prefix(8))"
-        case .updateItem(_, _, let changes):
-            let keys = changes.keys.sorted().joined(separator: ", ")
-            return "Update: \(keys)"
+            return "Re-elaborate [\(Self.itemLabel(itemId, in: workflow))]"
+        case .updateItem(_, let itemId, _):
+            return "Update [\(Self.itemLabel(itemId, in: workflow))]"
         case .addItem(_, let name, _):
             return "Add: \(name)"
-        case .removeItem(_, _):
-            return "Remove item"
+        case .removeItem(_, let itemId):
+            return "Remove [\(Self.itemLabel(itemId, in: workflow))]"
         case .addSection(_, let label, _):
             return "Add section: \(label)"
-        case .linkItems(_, _, let rel):
-            return "Link items (\(rel))"
-        case .unlinkItems(_, _, _):
-            return "Unlink items"
+        case .linkItems(let srcId, let tgtId, let rel):
+            return "Link [\(Self.itemLabel(srcId, in: workflow))] → [\(Self.itemLabel(tgtId, in: workflow))] (\(rel))"
+        case .unlinkItems(let srcId, let tgtId, _):
+            return "Unlink [\(Self.itemLabel(srcId, in: workflow))] ↔ [\(Self.itemLabel(tgtId, in: workflow))]"
         case .markComplete:
             return "Mark complete"
-        case .raiseUncertainty(_, _, _, let title, _, _, _):
+        case .raiseUncertainty(_, _, let relatedItemId, let title, _, _, _):
+            if let id = relatedItemId {
+                return "Raise question on [\(Self.itemLabel(id, in: workflow))]: \(title)"
+            }
             return "Raise question: \(title)"
         }
+    }
+
+    private static func itemLabel(_ id: UUID, in workflow: DesignWorkflow?) -> String {
+        workflow?.findItem(byId: id)?.item.name ?? String(id.uuidString.prefix(8))
     }
 }
 

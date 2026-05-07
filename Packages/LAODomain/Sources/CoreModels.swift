@@ -613,6 +613,7 @@ public enum DesignEventType {
     public static let elaborationCompleted = "elaboration_completed"
     public static let elaborationFailed = "elaboration_failed"
     public static let verdictChanged = "verdict_changed"
+    public static let approachConfirmed = "approach_confirmed"
     public static let itemAdded = "item_added"
     public static let itemRemoved = "item_removed"
     public static let edgeAdded = "edge_added"

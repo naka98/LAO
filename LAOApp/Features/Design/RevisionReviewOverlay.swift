@@ -325,7 +325,7 @@ struct RevisionReviewOverlay: View {
             ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
                 HStack(alignment: .top, spacing: 6) {
                     Text("•").foregroundStyle(theme.foregroundSecondary)
-                    Text(action.displayDescription)
+                    Text(action.displayDescription(in: vm.workflow))
                         .font(.callout)
                         .foregroundStyle(theme.foregroundPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
