@@ -495,6 +495,7 @@ struct DeliverableItem: Identifiable, Codable, Equatable {
         lastAgentLabel = try container.decodeIfPresent(String.self, forKey: .lastAgentLabel)
         parallelGroup = try container.decodeIfPresent(Int.self, forKey: .parallelGroup)
         scenarioGroup = try container.decodeIfPresent(String.self, forKey: .scenarioGroup)
+        verdictFlipCount = try container.decodeIfPresent(Int.self, forKey: .verdictFlipCount) ?? 0
         lastElaborationError = try container.decodeIfPresent(String.self, forKey: .lastElaborationError)
         partialOutput = try container.decodeIfPresent(String.self, forKey: .partialOutput)
         lastCheckpoint = try container.decodeIfPresent(Date.self, forKey: .lastCheckpoint)
@@ -1579,6 +1580,10 @@ struct DesignWorkflow: Codable {
         selectedApproachId = try container.decodeIfPresent(UUID.self, forKey: .selectedApproachId)
         hiddenRequirements = try container.decodeIfPresent([String].self, forKey: .hiddenRequirements) ?? []
         referenceAnchors = try container.decodeIfPresent([ReferenceImageData].self, forKey: .referenceAnchors)
+        providerUsage = try container.decodeIfPresent([String: ProviderUsageStats].self, forKey: .providerUsage)
+        partialAnalysisOutput = try container.decodeIfPresent(String.self, forKey: .partialAnalysisOutput)
+        designFreezeAt = try container.decodeIfPresent(Date.self, forKey: .designFreezeAt)
+        structureApprovedAt = try container.decodeIfPresent(Date.self, forKey: .structureApprovedAt)
         rebuildIndexes()
     }
 }
