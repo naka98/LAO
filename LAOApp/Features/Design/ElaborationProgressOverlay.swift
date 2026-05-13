@@ -274,18 +274,50 @@ struct ElaborationProgressOverlay: View {
                     .controlSize(.regular)
                     .disabled(!vm.isElaborationFullyDone)
                 }
-            } else {
+            } else if vm.isElaborating {
                 Spacer()
-                if vm.isElaborating {
+                Button {
+                    Task { await vm.gracefulStop() }
+                    onDismiss()
+                } label: {
+                    Label(lang.common.stop, systemImage: "stop.circle")
+                        .frame(minWidth: 80)
+                }
+                .buttonStyle(.bordered)
+                .tint(theme.criticalAccent)
+                .controlSize(.regular)
+            } else {
+                // Paused/interrupted: not elaborating and not isAllDone (pending items remain).
+                // Auto-shown by DesignWorkflowView when hasFailedItems is true; the user
+                // needs an escape path (Dismiss) and, when applicable, a Resume action.
+                let remaining = workflow?.deliverables.flatMap(\.items).filter {
+                    ($0.status == .pending || $0.status == .needsRevision)
+                    && $0.designVerdict != .excluded
+                }.count ?? 0
+                if remaining > 0 {
+                    Label(lang.design.elaborationFailed, systemImage: "pause.circle.fill")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(theme.warningAccent)
+                    Text("\(remaining)")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(theme.warningAccent)
+                }
+                Spacer()
+                Button { onDismiss() } label: {
+                    Label(lang.common.dismiss, systemImage: "xmark")
+                        .frame(minWidth: 80)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                if remaining > 0 {
                     Button {
-                        Task { await vm.gracefulStop() }
-                        onDismiss()
+                        Task { await vm.elaborateAllPending() }
                     } label: {
-                        Label(lang.common.stop, systemImage: "stop.circle")
+                        Label(lang.design.startDesignWork, systemImage: "hammer.fill")
                             .frame(minWidth: 80)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(theme.criticalAccent)
+                    .buttonStyle(.borderedProminent)
+                    .tint(theme.accentPrimary)
                     .controlSize(.regular)
                 }
             }
