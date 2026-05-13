@@ -932,9 +932,9 @@ enum DesignDocumentConverter {
         var stateTransitions: [StateTransition] = []
         for flow in flows {
             let sortedSteps = flow.steps.sorted { $0.order < $1.order }
-            for i in 0..<(sortedSteps.count - 1) {
-                guard let fromScreenId = sortedSteps[i].screenId,
-                      let toScreenId = sortedSteps[i + 1].screenId,
+            for (cur, next) in zip(sortedSteps, sortedSteps.dropFirst()) {
+                guard let fromScreenId = cur.screenId,
+                      let toScreenId = next.screenId,
                       fromScreenId != toScreenId else { continue }
                 let fromScreen = screens.first { $0.id == fromScreenId }
                 let toScreen = screens.first { $0.id == toScreenId }
@@ -944,7 +944,7 @@ enum DesignDocumentConverter {
                     stateTransitions.append(StateTransition(
                         fromState: fromScreenId,
                         toState: "\(stateName)@\(toScreenId)",
-                        trigger: sortedSteps[i + 1].action,
+                        trigger: next.action,
                         sideEffects: []
                     ))
                 }
