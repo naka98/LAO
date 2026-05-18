@@ -121,19 +121,6 @@ extension DesignWorkflowView {
                     action: nil
                 )
                 Divider()
-            } else if vm.isSpecifyPhase && allConfirmed && vm.hasSubstantiveExport && !vm.showConsistencyReview && !vm.hasIncompleteElaborationItems {
-                // P5: Export ready — hidden when consistency review overlay is open or incomplete items remain.
-                // Tappable so the user can recover if the auto-chain (elaboration →
-                // finishWorkflow) was interrupted (cancellation, view re-creation, etc.).
-                inspectorBannerRow(
-                    icon: "doc.badge.arrow.up.fill",
-                    text: lang.design.bannerExportReady,
-                    color: theme.positiveAccent,
-                    action: vm.isFinishing ? nil : {
-                        Task { await vm.finishWorkflow() }
-                    }
-                )
-                Divider()
             }
         }
     }
@@ -1260,7 +1247,7 @@ extension DesignWorkflowView {
                 Button {
                     vm.requestFinishApproval()
                 } label: {
-                    Label(lang.design.export, systemImage: "square.and.arrow.up")
+                    Label(lang.design.finishApprovalConfirm, systemImage: "checkmark.shield")
                 }
                 .buttonStyle(PrimaryActionButtonStyle())
                 .controlSize(.small)

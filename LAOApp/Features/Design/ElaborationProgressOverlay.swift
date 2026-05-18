@@ -274,18 +274,63 @@ struct ElaborationProgressOverlay: View {
                     .controlSize(.regular)
                     .disabled(!vm.isElaborationFullyDone)
                 }
-            } else {
+            } else if vm.isElaborating {
                 Spacer()
-                if vm.isElaborating {
+                Button {
+                    Task { await vm.gracefulStop() }
+                    onDismiss()
+                } label: {
+                    Label(lang.common.stop, systemImage: "stop.circle")
+                        .frame(minWidth: 80)
+                }
+                .buttonStyle(.bordered)
+                .tint(theme.criticalAccent)
+                .controlSize(.regular)
+            } else {
+                // Paused/interrupted: not elaborating and not isAllDone (pending items remain).
+                // Auto-shown by DesignWorkflowView when hasFailedItems is true; the user
+                // needs an escape path (Dismiss) and, when applicable, a Resume action.
+                let nonExcluded = workflow?.deliverables.flatMap(\.items)
+                    .filter { $0.designVerdict != .excluded } ?? []
+                let failed = nonExcluded.filter { $0.status == .needsRevision }.count
+                let pending = nonExcluded.filter { $0.status == .pending }.count
+                if failed > 0 {
+                    Label(lang.design.elaborationFailed, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(theme.warningAccent)
+                    Text("\(failed)")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(theme.warningAccent)
+                }
+                if pending > 0 {
+                    Label(lang.design.elaborationItemPending, systemImage: "clock.fill")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(theme.foregroundSecondary)
+                    Text("\(pending)")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(theme.foregroundSecondary)
+                }
+                Spacer()
+                Button { onDismiss() } label: {
+                    Label(lang.common.dismiss, systemImage: "xmark")
+                        .frame(minWidth: 80)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
+                if failed + pending > 0 {
                     Button {
-                        Task { await vm.gracefulStop() }
-                        onDismiss()
+                        Task { await vm.elaborateAllPending() }
                     } label: {
-                        Label(lang.common.stop, systemImage: "stop.circle")
-                            .frame(minWidth: 80)
+                        if failed > 0 {
+                            Label(lang.design.retryElaboration, systemImage: "arrow.counterclockwise")
+                                .frame(minWidth: 80)
+                        } else {
+                            Label(lang.design.startDesignWork, systemImage: "hammer.fill")
+                                .frame(minWidth: 80)
+                        }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(theme.criticalAccent)
+                    .buttonStyle(.borderedProminent)
+                    .tint(theme.accentPrimary)
                     .controlSize(.regular)
                 }
             }

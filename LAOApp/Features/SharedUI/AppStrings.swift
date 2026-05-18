@@ -463,7 +463,6 @@ struct AppStrings: @unchecked Sendable {
         let bannerPendingReview: (Int) -> String
         let bannerAllConfirmedReady: String
         let bannerElaborating: (Int, Int) -> String
-        let bannerExportReady: String
 
         // Tech stack editor
         let techStackTitle: String
@@ -1155,7 +1154,6 @@ extension AppStrings {
             bannerPendingReview: { n in "\(n) items awaiting review" },
             bannerAllConfirmedReady: "All confirmed — ready to start",
             bannerElaborating: { c, t in "Elaborating \(c)/\(t)" },
-            bannerExportReady: "Design complete",
             techStackTitle: "Tech Stack",
             techStackDescription: "AI agent generates specs tailored to your tech stack.",
             techStackLanguage: "Language",
@@ -1793,7 +1791,6 @@ extension AppStrings {
             bannerPendingReview: { n in "\(n)건 검토 대기" },
             bannerAllConfirmedReady: "모두 확인 완료 — 착수 가능",
             bannerElaborating: { c, t in "작성 중 \(c)/\(t)" },
-            bannerExportReady: "설계 완료",
             techStackTitle: "Tech Stack",
             techStackDescription: "AI 에이전트가 기술 스택에 맞는 설계서를 생성합니다.",
             techStackLanguage: "Language",
