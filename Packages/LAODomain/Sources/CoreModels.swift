@@ -379,6 +379,183 @@ public struct Idea: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+// MARK: - v0.8 Node Graph (Mindmap)
+
+/// Lifecycle status of a node graph workflow (mirrors DesignSessionStatus pattern).
+public enum NodeGraphWorkflowStatus: String, Codable, Sendable, CaseIterable {
+    case active
+    case paused
+    case completed
+    case failed
+}
+
+/// A v0.8 node graph workflow is the mindmap "session" attached to a graph-mode Idea.
+/// Exactly one workflow per Idea; rows are created lazily on first navigation into the graph view.
+public struct NodeGraphWorkflow: Identifiable, Hashable, Codable, Sendable {
+    public let id: UUID
+    public var ideaId: UUID
+    public var projectId: UUID
+    public var status: NodeGraphWorkflowStatus
+    public let createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        ideaId: UUID,
+        projectId: UUID,
+        status: NodeGraphWorkflowStatus = .active,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.ideaId = ideaId
+        self.projectId = projectId
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// Node typing — starts as `.free` and is differentiated by the AI over time.
+/// `.seed` is the root user idea; `.starter` is one of the weak standard roots (WHO/WHAT/FLOW/...).
+public enum GraphNodeKind: String, Codable, Sendable, CaseIterable {
+    case seed
+    case starter
+    case free
+    case decision
+    case option
+    case research
+    case gap
+}
+
+/// Node lifecycle state. Drives both interaction (exploring) and graph rendering (dimmed/folded).
+public enum GraphNodeStatus: String, Codable, Sendable, CaseIterable {
+    case pending
+    case exploring
+    case decided
+    case dimmed
+    case folded
+}
+
+/// Whether a node is on the adopted mainline, an alternative under consideration,
+/// or an archived branch preserved for reasoning history (D+G model).
+public enum GraphNodeBranchRole: String, Codable, Sendable, CaseIterable {
+    case mainline
+    case candidate
+    case archived
+}
+
+public struct GraphNode: Identifiable, Hashable, Codable, Sendable {
+    public let id: UUID
+    public var workflowId: UUID
+    public var kind: GraphNodeKind
+    public var status: GraphNodeStatus
+    public var branchRole: GraphNodeBranchRole
+    public var title: String
+    public var body: String
+    public var metadataJSON: String
+    public let createdAt: Date
+    public var updatedAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        workflowId: UUID,
+        kind: GraphNodeKind = .free,
+        status: GraphNodeStatus = .pending,
+        branchRole: GraphNodeBranchRole = .mainline,
+        title: String,
+        body: String = "",
+        metadataJSON: String = "{}",
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.workflowId = workflowId
+        self.kind = kind
+        self.status = status
+        self.branchRole = branchRole
+        self.title = title
+        self.body = body
+        self.metadataJSON = metadataJSON
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+/// Edge semantics.
+/// `parentChild` is the tree-forming drop; `sibling` connects G-branch alternatives;
+/// `reference` is a non-hierarchical cross-link; `supersedes` records that an adopted node
+/// replaces an earlier candidate (preserved for history).
+public enum GraphEdgeKind: String, Codable, Sendable, CaseIterable {
+    case parentChild
+    case sibling
+    case reference
+    case supersedes
+}
+
+public struct GraphEdge: Identifiable, Hashable, Codable, Sendable {
+    public let id: UUID
+    public var workflowId: UUID
+    public var fromNodeId: UUID
+    public var toNodeId: UUID
+    public var kind: GraphEdgeKind
+    public var metadataJSON: String
+    public let createdAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        workflowId: UUID,
+        fromNodeId: UUID,
+        toNodeId: UUID,
+        kind: GraphEdgeKind = .parentChild,
+        metadataJSON: String = "{}",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.workflowId = workflowId
+        self.fromNodeId = fromNodeId
+        self.toNodeId = toNodeId
+        self.kind = kind
+        self.metadataJSON = metadataJSON
+        self.createdAt = createdAt
+    }
+}
+
+/// Speaker of a message inside a node's conversation — the v0.8 "5-character drama" plus the user.
+public enum NodeMessageAuthor: String, Codable, Sendable, CaseIterable {
+    case user
+    case director
+    case specifier
+    case researcher
+    case optionizer
+    case gapDetector
+}
+
+public struct NodeMessage: Identifiable, Hashable, Codable, Sendable {
+    public let id: UUID
+    public var nodeId: UUID
+    public var author: NodeMessageAuthor
+    public var content: String
+    public var metadataJSON: String
+    public let createdAt: Date
+
+    public init(
+        id: UUID = UUID(),
+        nodeId: UUID,
+        author: NodeMessageAuthor,
+        content: String,
+        metadataJSON: String = "{}",
+        createdAt: Date = Date()
+    ) {
+        self.id = id
+        self.nodeId = nodeId
+        self.author = author
+        self.content = content
+        self.metadataJSON = metadataJSON
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - User Profile
 
 public struct UserProfile: Hashable, Codable, Sendable {

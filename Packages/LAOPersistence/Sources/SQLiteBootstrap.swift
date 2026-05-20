@@ -195,6 +195,63 @@ public enum SQLiteBootstrapSchema {
         "CREATE INDEX IF NOT EXISTS idx_design_events_session ON design_events(session_id, created_at DESC);",
     ]
 
+    // MARK: - v13 Schema (v0.8 Node Graph)
+
+    public static let v13Statements: [String] = [
+        """
+        CREATE TABLE IF NOT EXISTS node_graph_workflows (
+          id TEXT PRIMARY KEY,
+          idea_id TEXT NOT NULL REFERENCES ideas(id) ON DELETE CASCADE,
+          project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_at REAL NOT NULL,
+          updated_at REAL NOT NULL
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_node_graph_workflows_idea ON node_graph_workflows(idea_id);",
+        "CREATE INDEX IF NOT EXISTS idx_node_graph_workflows_project ON node_graph_workflows(project_id, created_at DESC);",
+        """
+        CREATE TABLE IF NOT EXISTS graph_nodes (
+          id TEXT PRIMARY KEY,
+          workflow_id TEXT NOT NULL REFERENCES node_graph_workflows(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL DEFAULT 'free',
+          status TEXT NOT NULL DEFAULT 'pending',
+          branch_role TEXT NOT NULL DEFAULT 'mainline',
+          title TEXT NOT NULL,
+          body TEXT NOT NULL DEFAULT '',
+          metadata_json TEXT NOT NULL DEFAULT '{}',
+          created_at REAL NOT NULL,
+          updated_at REAL NOT NULL
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_graph_nodes_workflow ON graph_nodes(workflow_id, created_at);",
+        """
+        CREATE TABLE IF NOT EXISTS graph_edges (
+          id TEXT PRIMARY KEY,
+          workflow_id TEXT NOT NULL REFERENCES node_graph_workflows(id) ON DELETE CASCADE,
+          from_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+          to_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL DEFAULT 'parentChild',
+          metadata_json TEXT NOT NULL DEFAULT '{}',
+          created_at REAL NOT NULL
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_graph_edges_workflow ON graph_edges(workflow_id);",
+        "CREATE INDEX IF NOT EXISTS idx_graph_edges_from ON graph_edges(from_node_id);",
+        "CREATE INDEX IF NOT EXISTS idx_graph_edges_to ON graph_edges(to_node_id);",
+        """
+        CREATE TABLE IF NOT EXISTS node_messages (
+          id TEXT PRIMARY KEY,
+          node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+          author TEXT NOT NULL,
+          content TEXT NOT NULL DEFAULT '',
+          metadata_json TEXT NOT NULL DEFAULT '{}',
+          created_at REAL NOT NULL
+        );
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_node_messages_node ON node_messages(node_id, created_at);",
+    ]
+
     /// Seed default CLI command templates (INSERT OR IGNORE to avoid overwriting user customizations).
     public static let v3SeedStatements: [String] = [
         """
@@ -355,6 +412,9 @@ public enum SQLiteBootstrapSchema {
         // v12: Idea.designMode — v0.7 linear vs v0.8 graph (mindmap) design mode.
         // Existing ideas default to 'linear' (v0.7 behavior preserved).
         try addColumnIfMissing(db, table: "ideas", column: "design_mode", definition: "TEXT NOT NULL DEFAULT 'linear'")
+
+        // v13: v0.8 Node Graph workflow body — workflows, nodes, edges, per-node messages.
+        try executeStatements(SQLiteBootstrapSchema.v13Statements, db: db)
 
         // Seed default CLI commands if empty
         for statement in SQLiteBootstrapSchema.v3SeedStatements {

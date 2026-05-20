@@ -950,6 +950,312 @@ public actor SeededSQLiteStore {
         }
     }
 
+    // MARK: - v0.8 Node Graph CRUD (v13)
+
+    public func getNodeGraphWorkflow(id: UUID) throws -> NodeGraphWorkflow? {
+        try withDatabase { db in
+            let sql = """
+            SELECT id, idea_id, project_id, status, created_at, updated_at
+            FROM node_graph_workflows WHERE id = ? LIMIT 1;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw SeededSQLiteStoreError.prepare(Self.lastError(db))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, id.uuidString, -1, sqliteTransient)
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return NodeGraphWorkflow(
+                id: UUID(uuidString: columnText(stmt, index: 0)) ?? UUID(),
+                ideaId: UUID(uuidString: columnText(stmt, index: 1)) ?? UUID(),
+                projectId: UUID(uuidString: columnText(stmt, index: 2)) ?? UUID(),
+                status: NodeGraphWorkflowStatus(rawValue: columnText(stmt, index: 3)) ?? .active,
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
+                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 5))
+            )
+        }
+    }
+
+    public func getNodeGraphWorkflow(ideaId: UUID) throws -> NodeGraphWorkflow? {
+        try withDatabase { db in
+            let sql = """
+            SELECT id, idea_id, project_id, status, created_at, updated_at
+            FROM node_graph_workflows WHERE idea_id = ? LIMIT 1;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw SeededSQLiteStoreError.prepare(Self.lastError(db))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, ideaId.uuidString, -1, sqliteTransient)
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return NodeGraphWorkflow(
+                id: UUID(uuidString: columnText(stmt, index: 0)) ?? UUID(),
+                ideaId: UUID(uuidString: columnText(stmt, index: 1)) ?? UUID(),
+                projectId: UUID(uuidString: columnText(stmt, index: 2)) ?? UUID(),
+                status: NodeGraphWorkflowStatus(rawValue: columnText(stmt, index: 3)) ?? .active,
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 4)),
+                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 5))
+            )
+        }
+    }
+
+    public func createNodeGraphWorkflow(_ workflow: NodeGraphWorkflow) throws -> NodeGraphWorkflow {
+        try withDatabase { db in
+            try Self.execute(db, sql: """
+            INSERT INTO node_graph_workflows (id, idea_id, project_id, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """, bindings: [
+                workflow.id.uuidString,
+                workflow.ideaId.uuidString,
+                workflow.projectId.uuidString,
+                workflow.status.rawValue,
+                "\(workflow.createdAt.timeIntervalSince1970)",
+                "\(workflow.updatedAt.timeIntervalSince1970)",
+            ])
+        }
+        return workflow
+    }
+
+    public func updateNodeGraphWorkflow(_ workflow: NodeGraphWorkflow) throws {
+        try withDatabase { db in
+            try Self.execute(db, sql: """
+            UPDATE node_graph_workflows SET status = ?, updated_at = ? WHERE id = ?;
+            """, bindings: [
+                workflow.status.rawValue,
+                "\(Date().timeIntervalSince1970)",
+                workflow.id.uuidString,
+            ])
+        }
+    }
+
+    public func deleteNodeGraphWorkflow(id: UUID) throws {
+        try withDatabase { db in
+            try Self.execute(db, sql: "DELETE FROM node_graph_workflows WHERE id = ?;", bindings: [id.uuidString])
+        }
+    }
+
+    public func listGraphNodes(workflowId: UUID) throws -> [GraphNode] {
+        try withDatabase { db in
+            let sql = """
+            SELECT id, workflow_id, kind, status, branch_role, title, body, metadata_json,
+                   created_at, updated_at
+            FROM graph_nodes WHERE workflow_id = ?
+            ORDER BY created_at ASC;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw SeededSQLiteStoreError.prepare(Self.lastError(db))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, workflowId.uuidString, -1, sqliteTransient)
+
+            var results: [GraphNode] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                results.append(GraphNode(
+                    id: UUID(uuidString: columnText(stmt, index: 0)) ?? UUID(),
+                    workflowId: UUID(uuidString: columnText(stmt, index: 1)) ?? UUID(),
+                    kind: GraphNodeKind(rawValue: columnText(stmt, index: 2)) ?? .free,
+                    status: GraphNodeStatus(rawValue: columnText(stmt, index: 3)) ?? .pending,
+                    branchRole: GraphNodeBranchRole(rawValue: columnText(stmt, index: 4)) ?? .mainline,
+                    title: columnText(stmt, index: 5),
+                    body: columnText(stmt, index: 6),
+                    metadataJSON: columnText(stmt, index: 7),
+                    createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 8)),
+                    updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9))
+                ))
+            }
+            return results
+        }
+    }
+
+    public func getGraphNode(id: UUID) throws -> GraphNode? {
+        try withDatabase { db in
+            let sql = """
+            SELECT id, workflow_id, kind, status, branch_role, title, body, metadata_json,
+                   created_at, updated_at
+            FROM graph_nodes WHERE id = ? LIMIT 1;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw SeededSQLiteStoreError.prepare(Self.lastError(db))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, id.uuidString, -1, sqliteTransient)
+
+            guard sqlite3_step(stmt) == SQLITE_ROW else { return nil }
+            return GraphNode(
+                id: UUID(uuidString: columnText(stmt, index: 0)) ?? UUID(),
+                workflowId: UUID(uuidString: columnText(stmt, index: 1)) ?? UUID(),
+                kind: GraphNodeKind(rawValue: columnText(stmt, index: 2)) ?? .free,
+                status: GraphNodeStatus(rawValue: columnText(stmt, index: 3)) ?? .pending,
+                branchRole: GraphNodeBranchRole(rawValue: columnText(stmt, index: 4)) ?? .mainline,
+                title: columnText(stmt, index: 5),
+                body: columnText(stmt, index: 6),
+                metadataJSON: columnText(stmt, index: 7),
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 8)),
+                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9))
+            )
+        }
+    }
+
+    public func createGraphNode(_ node: GraphNode) throws -> GraphNode {
+        try withDatabase { db in
+            try Self.execute(db, sql: """
+            INSERT INTO graph_nodes (id, workflow_id, kind, status, branch_role, title, body,
+                                     metadata_json, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, bindings: [
+                node.id.uuidString,
+                node.workflowId.uuidString,
+                node.kind.rawValue,
+                node.status.rawValue,
+                node.branchRole.rawValue,
+                node.title,
+                node.body,
+                node.metadataJSON,
+                "\(node.createdAt.timeIntervalSince1970)",
+                "\(node.updatedAt.timeIntervalSince1970)",
+            ])
+        }
+        return node
+    }
+
+    public func updateGraphNode(_ node: GraphNode) throws {
+        try withDatabase { db in
+            try Self.execute(db, sql: """
+            UPDATE graph_nodes SET
+                kind = ?, status = ?, branch_role = ?, title = ?, body = ?, metadata_json = ?,
+                updated_at = ?
+            WHERE id = ?;
+            """, bindings: [
+                node.kind.rawValue,
+                node.status.rawValue,
+                node.branchRole.rawValue,
+                node.title,
+                node.body,
+                node.metadataJSON,
+                "\(Date().timeIntervalSince1970)",
+                node.id.uuidString,
+            ])
+        }
+    }
+
+    public func deleteGraphNode(id: UUID) throws {
+        try withDatabase { db in
+            try Self.execute(db, sql: "DELETE FROM graph_nodes WHERE id = ?;", bindings: [id.uuidString])
+        }
+    }
+
+    public func listGraphEdges(workflowId: UUID) throws -> [GraphEdge] {
+        try withDatabase { db in
+            let sql = """
+            SELECT id, workflow_id, from_node_id, to_node_id, kind, metadata_json, created_at
+            FROM graph_edges WHERE workflow_id = ?
+            ORDER BY created_at ASC;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw SeededSQLiteStoreError.prepare(Self.lastError(db))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, workflowId.uuidString, -1, sqliteTransient)
+
+            var results: [GraphEdge] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                results.append(GraphEdge(
+                    id: UUID(uuidString: columnText(stmt, index: 0)) ?? UUID(),
+                    workflowId: UUID(uuidString: columnText(stmt, index: 1)) ?? UUID(),
+                    fromNodeId: UUID(uuidString: columnText(stmt, index: 2)) ?? UUID(),
+                    toNodeId: UUID(uuidString: columnText(stmt, index: 3)) ?? UUID(),
+                    kind: GraphEdgeKind(rawValue: columnText(stmt, index: 4)) ?? .parentChild,
+                    metadataJSON: columnText(stmt, index: 5),
+                    createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 6))
+                ))
+            }
+            return results
+        }
+    }
+
+    public func createGraphEdge(_ edge: GraphEdge) throws -> GraphEdge {
+        try withDatabase { db in
+            try Self.execute(db, sql: """
+            INSERT INTO graph_edges (id, workflow_id, from_node_id, to_node_id, kind,
+                                     metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?);
+            """, bindings: [
+                edge.id.uuidString,
+                edge.workflowId.uuidString,
+                edge.fromNodeId.uuidString,
+                edge.toNodeId.uuidString,
+                edge.kind.rawValue,
+                edge.metadataJSON,
+                "\(edge.createdAt.timeIntervalSince1970)",
+            ])
+        }
+        return edge
+    }
+
+    public func deleteGraphEdge(id: UUID) throws {
+        try withDatabase { db in
+            try Self.execute(db, sql: "DELETE FROM graph_edges WHERE id = ?;", bindings: [id.uuidString])
+        }
+    }
+
+    public func listNodeMessages(nodeId: UUID) throws -> [NodeMessage] {
+        try withDatabase { db in
+            let sql = """
+            SELECT id, node_id, author, content, metadata_json, created_at
+            FROM node_messages WHERE node_id = ?
+            ORDER BY created_at ASC;
+            """
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                throw SeededSQLiteStoreError.prepare(Self.lastError(db))
+            }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, nodeId.uuidString, -1, sqliteTransient)
+
+            var results: [NodeMessage] = []
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                results.append(NodeMessage(
+                    id: UUID(uuidString: columnText(stmt, index: 0)) ?? UUID(),
+                    nodeId: UUID(uuidString: columnText(stmt, index: 1)) ?? UUID(),
+                    author: NodeMessageAuthor(rawValue: columnText(stmt, index: 2)) ?? .user,
+                    content: columnText(stmt, index: 3),
+                    metadataJSON: columnText(stmt, index: 4),
+                    createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 5))
+                ))
+            }
+            return results
+        }
+    }
+
+    public func appendNodeMessage(_ message: NodeMessage) throws -> NodeMessage {
+        try withDatabase { db in
+            try Self.execute(db, sql: """
+            INSERT INTO node_messages (id, node_id, author, content, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?);
+            """, bindings: [
+                message.id.uuidString,
+                message.nodeId.uuidString,
+                message.author.rawValue,
+                message.content,
+                message.metadataJSON,
+                "\(message.createdAt.timeIntervalSince1970)",
+            ])
+        }
+        return message
+    }
+
+    public func deleteNodeMessages(nodeId: UUID) throws {
+        try withDatabase { db in
+            try Self.execute(db, sql: "DELETE FROM node_messages WHERE node_id = ?;", bindings: [nodeId.uuidString])
+        }
+    }
+
     // MARK: - SQLite Utilities
 
     private func withDatabase<T>(_ body: (OpaquePointer?) throws -> T) throws -> T {
@@ -1144,4 +1450,63 @@ public final class SQLiteDesignEventService: DesignEventService, @unchecked Send
     }
     public func appendEvent(_ event: DesignEvent) async throws { try await store.appendDesignEvent(event) }
     public func deleteEvents(sessionId: UUID) async throws { try await store.deleteDesignEvents(sessionId: sessionId) }
+}
+
+// MARK: - v0.8 Node Graph Service
+
+public final class SQLiteNodeGraphService: NodeGraphService, @unchecked Sendable {
+    private let store: SeededSQLiteStore
+    public init(store: SeededSQLiteStore) { self.store = store }
+
+    public func getWorkflow(id: UUID) async -> NodeGraphWorkflow? {
+        try? await store.getNodeGraphWorkflow(id: id)
+    }
+    public func getWorkflow(ideaId: UUID) async -> NodeGraphWorkflow? {
+        try? await store.getNodeGraphWorkflow(ideaId: ideaId)
+    }
+    public func createWorkflow(_ workflow: NodeGraphWorkflow) async throws -> NodeGraphWorkflow {
+        try await store.createNodeGraphWorkflow(workflow)
+    }
+    public func updateWorkflow(_ workflow: NodeGraphWorkflow) async throws {
+        try await store.updateNodeGraphWorkflow(workflow)
+    }
+    public func deleteWorkflow(id: UUID) async throws {
+        try await store.deleteNodeGraphWorkflow(id: id)
+    }
+
+    public func listNodes(workflowId: UUID) async -> [GraphNode] {
+        (try? await store.listGraphNodes(workflowId: workflowId)) ?? []
+    }
+    public func getNode(id: UUID) async -> GraphNode? {
+        try? await store.getGraphNode(id: id)
+    }
+    public func createNode(_ node: GraphNode) async throws -> GraphNode {
+        try await store.createGraphNode(node)
+    }
+    public func updateNode(_ node: GraphNode) async throws {
+        try await store.updateGraphNode(node)
+    }
+    public func deleteNode(id: UUID) async throws {
+        try await store.deleteGraphNode(id: id)
+    }
+
+    public func listEdges(workflowId: UUID) async -> [GraphEdge] {
+        (try? await store.listGraphEdges(workflowId: workflowId)) ?? []
+    }
+    public func createEdge(_ edge: GraphEdge) async throws -> GraphEdge {
+        try await store.createGraphEdge(edge)
+    }
+    public func deleteEdge(id: UUID) async throws {
+        try await store.deleteGraphEdge(id: id)
+    }
+
+    public func listMessages(nodeId: UUID) async -> [NodeMessage] {
+        (try? await store.listNodeMessages(nodeId: nodeId)) ?? []
+    }
+    public func appendMessage(_ message: NodeMessage) async throws -> NodeMessage {
+        try await store.appendNodeMessage(message)
+    }
+    public func deleteMessages(nodeId: UUID) async throws {
+        try await store.deleteNodeMessages(nodeId: nodeId)
+    }
 }

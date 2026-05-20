@@ -169,3 +169,33 @@ public protocol DesignEventService: Sendable {
     func appendEvent(_ event: DesignEvent) async throws
     func deleteEvents(sessionId: UUID) async throws
 }
+
+// MARK: - v0.8 Node Graph Service
+
+/// Single service surface for the v0.8 node graph workflow: workflow, nodes, edges, and per-node messages.
+/// Lookup-by-idea is provided because workflows are 1:1 with graph-mode ideas.
+public protocol NodeGraphService: Sendable {
+    // Workflow
+    func getWorkflow(id: UUID) async -> NodeGraphWorkflow?
+    func getWorkflow(ideaId: UUID) async -> NodeGraphWorkflow?
+    func createWorkflow(_ workflow: NodeGraphWorkflow) async throws -> NodeGraphWorkflow
+    func updateWorkflow(_ workflow: NodeGraphWorkflow) async throws
+    func deleteWorkflow(id: UUID) async throws
+
+    // Nodes
+    func listNodes(workflowId: UUID) async -> [GraphNode]
+    func getNode(id: UUID) async -> GraphNode?
+    func createNode(_ node: GraphNode) async throws -> GraphNode
+    func updateNode(_ node: GraphNode) async throws
+    func deleteNode(id: UUID) async throws
+
+    // Edges
+    func listEdges(workflowId: UUID) async -> [GraphEdge]
+    func createEdge(_ edge: GraphEdge) async throws -> GraphEdge
+    func deleteEdge(id: UUID) async throws
+
+    // Messages (per-node conversation)
+    func listMessages(nodeId: UUID) async -> [NodeMessage]
+    func appendMessage(_ message: NodeMessage) async throws -> NodeMessage
+    func deleteMessages(nodeId: UUID) async throws
+}

@@ -33,6 +33,9 @@ struct AppContainer {
     // v8 services
     let designEventService: DesignEventService
 
+    // v0.8 services (node graph)
+    let nodeGraphService: NodeGraphService
+
     static let liveOrPreview: AppContainer = {
         do {
             let location = try LAOStoreLocationResolver.defaultLocation()
@@ -65,6 +68,9 @@ struct AppContainer {
             // v8 services
             let designEventService = SQLiteDesignEventService(store: store)
 
+            // v0.8 services (node graph)
+            let nodeGraphService = SQLiteNodeGraphService(store: store)
+
             return AppContainer(
                 projectService: projectService,
                 agentService: agentService,
@@ -81,7 +87,8 @@ struct AppContainer {
                 designSessionService: designSessionService,
                 activeWorkflowCoordinator: ActiveWorkflowCoordinator(),
                 ideaService: ideaService,
-                designEventService: designEventService
+                designEventService: designEventService,
+                nodeGraphService: nodeGraphService
             )
         } catch {
             fatalError("Failed to initialize LAO store: \(error)")
