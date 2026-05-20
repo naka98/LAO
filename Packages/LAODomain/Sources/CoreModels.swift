@@ -324,6 +324,13 @@ public enum IdeaStatus: String, Codable, Sendable, CaseIterable {
     case designFailed
 }
 
+/// v0.7 linear (phase-stepped) vs v0.8 graph (node mindmap) design mode.
+/// Set at idea creation and immutable for the idea's lifetime.
+public enum IdeaDesignMode: String, Codable, Sendable, CaseIterable {
+    case linear
+    case graph
+}
+
 public struct Idea: Identifiable, Hashable, Codable, Sendable {
     public let id: UUID
     public var projectId: UUID
@@ -331,6 +338,7 @@ public struct Idea: Identifiable, Hashable, Codable, Sendable {
     public var status: IdeaStatus
     public var messagesJSON: String
     public var designSessionId: UUID?
+    public var designMode: IdeaDesignMode
     public var apiCallCount: Int
     public var totalInputChars: Int
     public var totalOutputChars: Int
@@ -349,6 +357,7 @@ public struct Idea: Identifiable, Hashable, Codable, Sendable {
         status: IdeaStatus = .draft,
         messagesJSON: String = "[]",
         designSessionId: UUID? = nil,
+        designMode: IdeaDesignMode = .linear,
         apiCallCount: Int = 0,
         totalInputChars: Int = 0,
         totalOutputChars: Int = 0,
@@ -361,6 +370,7 @@ public struct Idea: Identifiable, Hashable, Codable, Sendable {
         self.status = status
         self.messagesJSON = messagesJSON
         self.designSessionId = designSessionId
+        self.designMode = designMode
         self.apiCallCount = apiCallCount
         self.totalInputChars = totalInputChars
         self.totalOutputChars = totalOutputChars

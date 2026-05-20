@@ -757,6 +757,7 @@ public actor SeededSQLiteStore {
             let sql = """
             SELECT id, project_id, title, status, design_session_id,
                    api_call_count, total_input_chars, total_output_chars,
+                   design_mode,
                    created_at, updated_at
             FROM ideas WHERE project_id = ?
             ORDER BY created_at DESC LIMIT ? OFFSET ?;
@@ -781,11 +782,12 @@ public actor SeededSQLiteStore {
                     status: IdeaStatus(rawValue: columnText(stmt, index: 3)) ?? .draft,
                     messagesJSON: "",  // Not loaded for list queries
                     designSessionId: convertedIdStr.isEmpty ? nil : UUID(uuidString: convertedIdStr),
+                    designMode: IdeaDesignMode(rawValue: columnText(stmt, index: 8)) ?? .linear,
                     apiCallCount: Int(sqlite3_column_int(stmt, 5)),
                     totalInputChars: Int(sqlite3_column_int(stmt, 6)),
                     totalOutputChars: Int(sqlite3_column_int(stmt, 7)),
-                    createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 8)),
-                    updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9))
+                    createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9)),
+                    updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 10))
                 ))
             }
             return results
@@ -797,6 +799,7 @@ public actor SeededSQLiteStore {
             let sql = """
             SELECT id, project_id, title, status, messages_json, design_session_id,
                    api_call_count, total_input_chars, total_output_chars,
+                   design_mode,
                    created_at, updated_at
             FROM ideas WHERE id = ? LIMIT 1;
             """
@@ -816,11 +819,12 @@ public actor SeededSQLiteStore {
                 status: IdeaStatus(rawValue: columnText(stmt, index: 3)) ?? .draft,
                 messagesJSON: columnText(stmt, index: 4),
                 designSessionId: convertedIdStr.isEmpty ? nil : UUID(uuidString: convertedIdStr),
+                designMode: IdeaDesignMode(rawValue: columnText(stmt, index: 9)) ?? .linear,
                 apiCallCount: Int(sqlite3_column_int(stmt, 6)),
                 totalInputChars: Int(sqlite3_column_int(stmt, 7)),
                 totalOutputChars: Int(sqlite3_column_int(stmt, 8)),
-                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 9)),
-                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 10))
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 10)),
+                updatedAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 11))
             )
         }
     }
@@ -829,8 +833,9 @@ public actor SeededSQLiteStore {
         try withDatabase { db in
             try Self.execute(db, sql: """
             INSERT INTO ideas (id, project_id, title, status, messages_json, design_session_id,
-                               api_call_count, total_input_chars, total_output_chars, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                               api_call_count, total_input_chars, total_output_chars,
+                               design_mode, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, bindings: [
                 idea.id.uuidString,
                 idea.projectId.uuidString,
@@ -841,6 +846,7 @@ public actor SeededSQLiteStore {
                 "\(idea.apiCallCount)",
                 "\(idea.totalInputChars)",
                 "\(idea.totalOutputChars)",
+                idea.designMode.rawValue,
                 "\(idea.createdAt.timeIntervalSince1970)",
                 "\(idea.updatedAt.timeIntervalSince1970)",
             ])
@@ -853,7 +859,8 @@ public actor SeededSQLiteStore {
             try Self.execute(db, sql: """
             UPDATE ideas SET
                 title = ?, status = ?, messages_json = ?, design_session_id = ?,
-                api_call_count = ?, total_input_chars = ?, total_output_chars = ?, updated_at = ?
+                api_call_count = ?, total_input_chars = ?, total_output_chars = ?,
+                design_mode = ?, updated_at = ?
             WHERE id = ?;
             """, bindings: [
                 idea.title,
@@ -863,6 +870,7 @@ public actor SeededSQLiteStore {
                 "\(idea.apiCallCount)",
                 "\(idea.totalInputChars)",
                 "\(idea.totalOutputChars)",
+                idea.designMode.rawValue,
                 "\(Date().timeIntervalSince1970)",
                 idea.id.uuidString,
             ])

@@ -84,8 +84,8 @@ final class IdeaBoardViewModel {
     // MARK: - CRUD
 
     /// Creates a blank idea and returns it for immediate navigation.
-    func createBlankIdea(title: String) async -> Idea? {
-        let idea = Idea(projectId: projectId, title: title)
+    func createBlankIdea(title: String, designMode: IdeaDesignMode = .linear) async -> Idea? {
+        let idea = Idea(projectId: projectId, title: title, designMode: designMode)
         do {
             let created = try await container.ideaService.createIdea(idea)
             ideas.insert(created, at: 0)

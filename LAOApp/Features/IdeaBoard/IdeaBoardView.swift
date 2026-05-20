@@ -130,15 +130,36 @@ struct IdeaBoardView: View {
             backAction: headerBackAction
         ) {
             if selectedIdeaId == nil && activeDesignRequestId == nil {
-                Button {
-                    Task {
-                        let created = await viewModel.createBlankIdea(title: lang.ideaBoard.newIdeaDefaultTitle)
-                        if let created { selectedIdeaId = created.id }
+                Menu {
+                    Button {
+                        Task {
+                            let created = await viewModel.createBlankIdea(
+                                title: lang.ideaBoard.newIdeaDefaultTitle,
+                                designMode: .linear
+                            )
+                            if let created { selectedIdeaId = created.id }
+                        }
+                    } label: {
+                        Label(lang.ideaBoard.designModeLinearMenu, systemImage: "list.bullet.rectangle")
+                    }
+                    Button {
+                        Task {
+                            let created = await viewModel.createBlankIdea(
+                                title: lang.ideaBoard.newIdeaDefaultTitle,
+                                designMode: .graph
+                            )
+                            if let created { selectedIdeaId = created.id }
+                        }
+                    } label: {
+                        Label(lang.ideaBoard.designModeGraphMenu, systemImage: "point.3.connected.trianglepath.dotted")
                     }
                 } label: {
                     Label(lang.ideaBoard.newIdea, systemImage: "plus")
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
                 .buttonStyle(PrimaryActionButtonStyle())
+                .fixedSize()
             }
         }
     }
@@ -243,11 +264,12 @@ struct IdeaBoardView: View {
     private func ideaCard(_ idea: Idea) -> some View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
+                HStack(spacing: 6) {
                     Text(idea.title)
                         .font(AppTheme.Typography.heading)
                         .lineLimit(1)
                     Spacer()
+                    designModeBadge(for: idea.designMode)
                     switch idea.status {
                     case .listening:
                         BadgeView(title: lang.ideaBoard.listeningStage, tone: .blue)
@@ -278,6 +300,24 @@ struct IdeaBoardView: View {
         }
     }
 
+    @ViewBuilder
+    private func designModeBadge(for mode: IdeaDesignMode) -> some View {
+        switch mode {
+        case .linear:
+            BadgeView(
+                title: lang.ideaBoard.designModeLinearBadge,
+                tone: .neutral,
+                systemImage: "list.bullet.rectangle"
+            )
+        case .graph:
+            BadgeView(
+                title: lang.ideaBoard.designModeGraphBadge,
+                tone: .purple,
+                systemImage: "point.3.connected.trianglepath.dotted"
+            )
+        }
+    }
+
     private var emptyState: some View {
         ContentUnavailableView(
             lang.ideaBoard.noIdeasTitle,
@@ -292,9 +332,14 @@ struct IdeaBoardView: View {
     private func ideaDetailView(ideaId: UUID) -> some View {
         let idea = viewModel.ideas.first(where: { $0.id == ideaId })
 
-        // Design-phase idea → show Design workflow directly
-        let isInDesign = idea?.status == .converted || idea?.status == .designing || idea?.status == .designed || idea?.status == .designFailed
-        if let idea, isInDesign, let requestId = idea.designSessionId {
+        // v0.8 graph mode: dedicated node graph workflow not yet implemented.
+        // Short-circuit to placeholder so users see the entry point but can't fall through to v0.7 flow.
+        if idea?.designMode == .graph {
+            graphModePlaceholder
+        } else if let idea,
+                  idea.status == .converted || idea.status == .designing || idea.status == .designed || idea.status == .designFailed,
+                  let requestId = idea.designSessionId {
+            // Design-phase idea → show Design workflow directly
             DesignWorkflowView(
                 project: project,
                 container: container,
@@ -312,6 +357,29 @@ struct IdeaBoardView: View {
             IdeaDetailView(viewModel: vm)
                 .id(ideaId)
         }
+    }
+
+    private var graphModePlaceholder: some View {
+        VStack {
+            Spacer()
+            SurfaceCard {
+                VStack(spacing: 12) {
+                    Image(systemName: "point.3.connected.trianglepath.dotted")
+                        .font(.system(size: 36, weight: .light))
+                        .foregroundStyle(Color.purple)
+                    Text(lang.ideaBoard.designModeGraphPlaceholderTitle)
+                        .font(AppTheme.Typography.heading)
+                    Text(lang.ideaBoard.designModeGraphPlaceholderMessage)
+                        .font(AppTheme.Typography.bodySecondary)
+                        .foregroundStyle(theme.foregroundSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(AppTheme.Spacing.xl)
+            }
+            .frame(maxWidth: 360)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func resolveDetailVM(ideaId: UUID, idea: Idea?) -> IdeaDetailViewModel {

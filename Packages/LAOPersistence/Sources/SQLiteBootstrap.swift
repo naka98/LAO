@@ -352,6 +352,10 @@ public enum SQLiteBootstrapSchema {
         // v11: Design Brief — structured exploration output (brief = BRD + synthesis direction + key decisions)
         try addColumnIfMissing(db, table: "design_sessions", column: "design_brief_json", definition: "TEXT NOT NULL DEFAULT ''")
 
+        // v12: Idea.designMode — v0.7 linear vs v0.8 graph (mindmap) design mode.
+        // Existing ideas default to 'linear' (v0.7 behavior preserved).
+        try addColumnIfMissing(db, table: "ideas", column: "design_mode", definition: "TEXT NOT NULL DEFAULT 'linear'")
+
         // Seed default CLI commands if empty
         for statement in SQLiteBootstrapSchema.v3SeedStatements {
             sqlite3_exec(db, statement, nil, nil, nil)

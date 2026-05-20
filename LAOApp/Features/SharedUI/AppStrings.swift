@@ -634,6 +634,14 @@ struct AppStrings: @unchecked Sendable {
         // BRD error messages
         let jsonNotFoundError: String
         let jsonParseFailedFormat: (String) -> String
+
+        // v0.8 design mode (linear vs graph)
+        let designModeLinearMenu: String
+        let designModeGraphMenu: String
+        let designModeLinearBadge: String
+        let designModeGraphBadge: String
+        let designModeGraphPlaceholderTitle: String
+        let designModeGraphPlaceholderMessage: String
     }
 
     // MARK: - DesignSession
@@ -1299,7 +1307,13 @@ extension AppStrings {
             referenceRequestMessage: "Show me reference images.",
             referenceSearchFailed: "Reference search failed",
             jsonNotFoundError: "No JSON found in the response",
-            jsonParseFailedFormat: { s in "JSON parse failed: \(s)…" }
+            jsonParseFailedFormat: { s in "JSON parse failed: \(s)…" },
+            designModeLinearMenu: "Step-by-step Design",
+            designModeGraphMenu: "Mindmap Design",
+            designModeLinearBadge: "Step",
+            designModeGraphBadge: "Mindmap",
+            designModeGraphPlaceholderTitle: "Mindmap Design Mode",
+            designModeGraphPlaceholderMessage: "The node canvas is coming in 0.8 Phase 2."
         ),
         designSession: DesignSession(
             newSession: "New Design Session",
@@ -1936,7 +1950,13 @@ extension AppStrings {
             referenceRequestMessage: "레퍼런스 이미지를 보여주세요.",
             referenceSearchFailed: "레퍼런스 탐색 실패",
             jsonNotFoundError: "응답에서 JSON을 찾을 수 없습니다",
-            jsonParseFailedFormat: { s in "JSON 파싱 실패: \(s)…" }
+            jsonParseFailedFormat: { s in "JSON 파싱 실패: \(s)…" },
+            designModeLinearMenu: "단계로 설계",
+            designModeGraphMenu: "마인드맵으로 설계",
+            designModeLinearBadge: "단계",
+            designModeGraphBadge: "마인드맵",
+            designModeGraphPlaceholderTitle: "마인드맵 설계 모드",
+            designModeGraphPlaceholderMessage: "0.8 Phase 2에서 노드 캔버스가 들어옵니다."
         ),
         designSession: DesignSession(
             newSession: "새 설계 세션",

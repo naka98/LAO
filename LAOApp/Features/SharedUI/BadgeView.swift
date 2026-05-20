@@ -6,15 +6,22 @@ struct BadgeView: View {
 
     let title: String
     let tone: StatusTone
+    var systemImage: String? = nil
 
     var body: some View {
-        Text(title)
-            .font(AppTheme.Typography.bodySecondary.weight(.semibold))
-            .foregroundStyle(foregroundColor)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(backgroundColor)
-            .clipShape(Capsule())
+        HStack(spacing: 4) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(AppTheme.Typography.caption.weight(.semibold))
+            }
+            Text(title)
+                .font(AppTheme.Typography.bodySecondary.weight(.semibold))
+        }
+        .foregroundStyle(foregroundColor)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(backgroundColor)
+        .clipShape(Capsule())
     }
 
     private var backgroundColor: Color {
