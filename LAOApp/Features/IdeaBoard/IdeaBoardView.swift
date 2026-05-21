@@ -332,10 +332,16 @@ struct IdeaBoardView: View {
     private func ideaDetailView(ideaId: UUID) -> some View {
         let idea = viewModel.ideas.first(where: { $0.id == ideaId })
 
-        // v0.8 graph mode: dedicated node graph workflow not yet implemented.
-        // Short-circuit to placeholder so users see the entry point but can't fall through to v0.7 flow.
-        if idea?.designMode == .graph {
-            graphModePlaceholder
+        // v0.8 graph mode: dedicated node graph workflow.
+        // Routes to NodeGraphWorkflowView so the v0.7 phase-stepped flow is never entered.
+        if let idea, idea.designMode == .graph {
+            NodeGraphWorkflowView(
+                container: container,
+                projectId: project.id,
+                ideaId: idea.id,
+                ideaTitle: idea.title
+            )
+            .id(idea.id)
         } else if let idea,
                   idea.status == .converted || idea.status == .designing || idea.status == .designed || idea.status == .designFailed,
                   let requestId = idea.designSessionId {
@@ -357,29 +363,6 @@ struct IdeaBoardView: View {
             IdeaDetailView(viewModel: vm)
                 .id(ideaId)
         }
-    }
-
-    private var graphModePlaceholder: some View {
-        VStack {
-            Spacer()
-            SurfaceCard {
-                VStack(spacing: 12) {
-                    Image(systemName: "point.3.connected.trianglepath.dotted")
-                        .font(.system(size: 36, weight: .light))
-                        .foregroundStyle(Color.purple)
-                    Text(lang.ideaBoard.designModeGraphPlaceholderTitle)
-                        .font(AppTheme.Typography.heading)
-                    Text(lang.ideaBoard.designModeGraphPlaceholderMessage)
-                        .font(AppTheme.Typography.bodySecondary)
-                        .foregroundStyle(theme.foregroundSecondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(AppTheme.Spacing.xl)
-            }
-            .frame(maxWidth: 360)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func resolveDetailVM(ideaId: UUID, idea: Idea?) -> IdeaDetailViewModel {

@@ -642,6 +642,16 @@ struct AppStrings: @unchecked Sendable {
         let designModeGraphBadge: String
         let designModeGraphPlaceholderTitle: String
         let designModeGraphPlaceholderMessage: String
+
+        // v0.8 node graph — weak starter labels (6 standard roots)
+        let nodeGraphStarterUsers: String
+        let nodeGraphStarterFeatures: String
+        let nodeGraphStarterFlow: String
+        let nodeGraphStarterDecisions: String
+        let nodeGraphStarterRisks: String
+        let nodeGraphStarterSuccess: String
+        let nodeGraphLoadingStatus: String
+        let nodeGraphBootstrapFailedFormat: (String) -> String
     }
 
     // MARK: - DesignSession
@@ -1313,7 +1323,15 @@ extension AppStrings {
             designModeLinearBadge: "Step",
             designModeGraphBadge: "Mindmap",
             designModeGraphPlaceholderTitle: "Mindmap Design Mode",
-            designModeGraphPlaceholderMessage: "The node canvas is coming in 0.8 Phase 2."
+            designModeGraphPlaceholderMessage: "The node canvas is coming in 0.8 Phase 2.",
+            nodeGraphStarterUsers: "Users",
+            nodeGraphStarterFeatures: "Features",
+            nodeGraphStarterFlow: "Flow",
+            nodeGraphStarterDecisions: "Decisions",
+            nodeGraphStarterRisks: "Risks",
+            nodeGraphStarterSuccess: "Success",
+            nodeGraphLoadingStatus: "Loading mindmap...",
+            nodeGraphBootstrapFailedFormat: { reason in "Failed to start mindmap: \(reason)" }
         ),
         designSession: DesignSession(
             newSession: "New Design Session",
@@ -1956,7 +1974,15 @@ extension AppStrings {
             designModeLinearBadge: "단계",
             designModeGraphBadge: "마인드맵",
             designModeGraphPlaceholderTitle: "마인드맵 설계 모드",
-            designModeGraphPlaceholderMessage: "0.8 Phase 2에서 노드 캔버스가 들어옵니다."
+            designModeGraphPlaceholderMessage: "0.8 Phase 2에서 노드 캔버스가 들어옵니다.",
+            nodeGraphStarterUsers: "사용자",
+            nodeGraphStarterFeatures: "핵심 기능",
+            nodeGraphStarterFlow: "사용 흐름",
+            nodeGraphStarterDecisions: "결정",
+            nodeGraphStarterRisks: "위험",
+            nodeGraphStarterSuccess: "성공 기준",
+            nodeGraphLoadingStatus: "마인드맵 불러오는 중...",
+            nodeGraphBootstrapFailedFormat: { reason in "마인드맵 시작 실패: \(reason)" }
         ),
         designSession: DesignSession(
             newSession: "새 설계 세션",
