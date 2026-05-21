@@ -652,6 +652,12 @@ struct AppStrings: @unchecked Sendable {
         let nodeGraphStarterSuccess: String
         let nodeGraphLoadingStatus: String
         let nodeGraphBootstrapFailedFormat: (String) -> String
+
+        // v0.8 node graph — node expansion UI (Step 2b)
+        let nodeGraphExpandedEmptyBody: String
+        let nodeGraphExpandedConversationTitle: String
+        let nodeGraphExpandedConversationHint: String
+        let nodeGraphExpandedClose: String
     }
 
     // MARK: - DesignSession
@@ -1331,7 +1337,11 @@ extension AppStrings {
             nodeGraphStarterRisks: "Risks",
             nodeGraphStarterSuccess: "Success",
             nodeGraphLoadingStatus: "Loading mindmap...",
-            nodeGraphBootstrapFailedFormat: { reason in "Failed to start mindmap: \(reason)" }
+            nodeGraphBootstrapFailedFormat: { reason in "Failed to start mindmap: \(reason)" },
+            nodeGraphExpandedEmptyBody: "Nothing here yet — pick this up in the next step.",
+            nodeGraphExpandedConversationTitle: "Conversation",
+            nodeGraphExpandedConversationHint: "AI conversation hooks up in the next step.",
+            nodeGraphExpandedClose: "Close"
         ),
         designSession: DesignSession(
             newSession: "New Design Session",
@@ -1982,7 +1992,11 @@ extension AppStrings {
             nodeGraphStarterRisks: "위험",
             nodeGraphStarterSuccess: "성공 기준",
             nodeGraphLoadingStatus: "마인드맵 불러오는 중...",
-            nodeGraphBootstrapFailedFormat: { reason in "마인드맵 시작 실패: \(reason)" }
+            nodeGraphBootstrapFailedFormat: { reason in "마인드맵 시작 실패: \(reason)" },
+            nodeGraphExpandedEmptyBody: "아직 비어 있어요 — 다음 단계에서 채워집니다.",
+            nodeGraphExpandedConversationTitle: "대화",
+            nodeGraphExpandedConversationHint: "다음 단계에서 AI 대화가 연결됩니다.",
+            nodeGraphExpandedClose: "닫기"
         ),
         designSession: DesignSession(
             newSession: "새 설계 세션",
