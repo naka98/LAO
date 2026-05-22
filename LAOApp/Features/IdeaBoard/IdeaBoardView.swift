@@ -337,7 +337,7 @@ struct IdeaBoardView: View {
         if let idea, idea.designMode == .graph {
             NodeGraphWorkflowView(
                 container: container,
-                projectId: project.id,
+                project: project,
                 ideaId: idea.id,
                 ideaTitle: idea.title
             )

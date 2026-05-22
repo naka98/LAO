@@ -654,10 +654,54 @@ struct AppStrings: @unchecked Sendable {
         let nodeGraphBootstrapFailedFormat: (String) -> String
 
         // v0.8 node graph — node expansion UI (Step 2b)
-        let nodeGraphExpandedEmptyBody: String
         let nodeGraphExpandedConversationTitle: String
-        let nodeGraphExpandedConversationHint: String
         let nodeGraphExpandedClose: String
+
+        // v0.8 node graph — in-node conversation (Step 3 / 4a)
+        let nodeGraphChatInputPlaceholder: String
+        let nodeGraphChatRespondingHint: String
+        let nodeGraphChatEmptyHint: String
+        let nodeGraphChatEmptyResponse: String
+        let nodeGraphChatAuthorUser: String
+        let nodeGraphChatAuthorDirector: String
+        let nodeGraphChatAuthorSpecifier: String
+        let nodeGraphChatAuthorResearcher: String
+        let nodeGraphChatAuthorOptionizer: String
+        let nodeGraphChatAuthorGapDetector: String
+        let nodeGraphChatSendFailedFormat: (String) -> String
+
+        // v0.8 node graph — routing chip (Step 4b)
+        let nodeGraphChatRoutingChipFormat: (String) -> String
+
+        // v0.8 node graph — sub-node proposal approval card (Step 5a)
+        let nodeGraphProposalHeader: String
+        let nodeGraphProposalApprove: String
+        let nodeGraphProposalDismiss: String
+        let nodeGraphProposalApproveFailedFormat: (String) -> String
+
+        // v0.8 node graph — option branches approval card (Step 5b)
+        let nodeGraphBranchesHeaderFormat: (Int) -> String
+        let nodeGraphBranchesApproveAll: String
+
+        // v0.8 node graph — candidate cleanup actions (Step 5c-1)
+        let nodeGraphCandidateAdopt: String
+        let nodeGraphCandidateFold: String
+        let nodeGraphCleanupFailedFormat: (String) -> String
+
+        // v0.8 node graph — merge + discard (Step 5c-2)
+        let nodeGraphCandidateMergeFormat: (Int) -> String
+        let nodeGraphCandidateMergeConfirmTitleFormat: (Int) -> String
+        let nodeGraphCandidateMergeMessage: String
+        let nodeGraphCandidateMergeConfirm: String
+        let nodeGraphCandidateDiscard: String
+        let nodeGraphCandidateDiscardConfirmTitle: String
+        let nodeGraphCandidateDiscardMessage: String
+
+        // v0.8 node graph — export (Step 5d-1)
+        let nodeGraphExportButton: String
+        let nodeGraphExportSuccessTitle: String
+        let nodeGraphExportSuccessPathFormat: (String) -> String
+        let nodeGraphExportFailedFormat: (String) -> String
     }
 
     // MARK: - DesignSession
@@ -1338,10 +1382,40 @@ extension AppStrings {
             nodeGraphStarterSuccess: "Success",
             nodeGraphLoadingStatus: "Loading mindmap...",
             nodeGraphBootstrapFailedFormat: { reason in "Failed to start mindmap: \(reason)" },
-            nodeGraphExpandedEmptyBody: "Nothing here yet — pick this up in the next step.",
             nodeGraphExpandedConversationTitle: "Conversation",
-            nodeGraphExpandedConversationHint: "AI conversation hooks up in the next step.",
-            nodeGraphExpandedClose: "Close"
+            nodeGraphExpandedClose: "Close",
+            nodeGraphChatInputPlaceholder: "Tell me more about this node…",
+            nodeGraphChatRespondingHint: "Thinking…",
+            nodeGraphChatEmptyHint: "No conversation yet — type a line below to start.",
+            nodeGraphChatEmptyResponse: "Empty response",
+            nodeGraphChatAuthorUser: "You",
+            nodeGraphChatAuthorDirector: "Director",
+            nodeGraphChatAuthorSpecifier: "Specifier",
+            nodeGraphChatAuthorResearcher: "Researcher",
+            nodeGraphChatAuthorOptionizer: "Optionizer",
+            nodeGraphChatAuthorGapDetector: "Gap Detector",
+            nodeGraphChatSendFailedFormat: { reason in "Couldn't send: \(reason)" },
+            nodeGraphChatRoutingChipFormat: { role in "\(role) is answering…" },
+            nodeGraphProposalHeader: "Suggested sub-node",
+            nodeGraphProposalApprove: "Add",
+            nodeGraphProposalDismiss: "Dismiss",
+            nodeGraphProposalApproveFailedFormat: { reason in "Couldn't add node: \(reason)" },
+            nodeGraphBranchesHeaderFormat: { count in "Branch options (\(count))" },
+            nodeGraphBranchesApproveAll: "Add all",
+            nodeGraphCandidateAdopt: "Adopt this branch",
+            nodeGraphCandidateFold: "Fold",
+            nodeGraphCleanupFailedFormat: { reason in "Couldn't update branch: \(reason)" },
+            nodeGraphCandidateMergeFormat: { count in "Merge (\(count) branches)" },
+            nodeGraphCandidateMergeConfirmTitleFormat: { count in "Merge \(count) branches into one?" },
+            nodeGraphCandidateMergeMessage: "The director will synthesize the selected branches into a new mainline option. The originals will be archived.",
+            nodeGraphCandidateMergeConfirm: "Merge",
+            nodeGraphCandidateDiscard: "Discard",
+            nodeGraphCandidateDiscardConfirmTitle: "Discard this branch?",
+            nodeGraphCandidateDiscardMessage: "Discarding removes the branch entirely. To keep the reasoning trail, fold it instead.",
+            nodeGraphExportButton: "Export",
+            nodeGraphExportSuccessTitle: "Export complete",
+            nodeGraphExportSuccessPathFormat: { path in "Saved to \(path)" },
+            nodeGraphExportFailedFormat: { reason in "Export failed: \(reason)" }
         ),
         designSession: DesignSession(
             newSession: "New Design Session",
@@ -1993,10 +2067,40 @@ extension AppStrings {
             nodeGraphStarterSuccess: "성공 기준",
             nodeGraphLoadingStatus: "마인드맵 불러오는 중...",
             nodeGraphBootstrapFailedFormat: { reason in "마인드맵 시작 실패: \(reason)" },
-            nodeGraphExpandedEmptyBody: "아직 비어 있어요 — 다음 단계에서 채워집니다.",
             nodeGraphExpandedConversationTitle: "대화",
-            nodeGraphExpandedConversationHint: "다음 단계에서 AI 대화가 연결됩니다.",
-            nodeGraphExpandedClose: "닫기"
+            nodeGraphExpandedClose: "닫기",
+            nodeGraphChatInputPlaceholder: "이 노드에 대해 더 이야기해 보세요…",
+            nodeGraphChatRespondingHint: "생각하는 중…",
+            nodeGraphChatEmptyHint: "아직 대화가 없습니다 — 아래에 한 줄 입력해 보세요.",
+            nodeGraphChatEmptyResponse: "응답이 비어 있습니다",
+            nodeGraphChatAuthorUser: "나",
+            nodeGraphChatAuthorDirector: "디렉터",
+            nodeGraphChatAuthorSpecifier: "구체화",
+            nodeGraphChatAuthorResearcher: "리서치",
+            nodeGraphChatAuthorOptionizer: "옵션",
+            nodeGraphChatAuthorGapDetector: "누락 감지",
+            nodeGraphChatSendFailedFormat: { reason in "보내기 실패: \(reason)" },
+            nodeGraphChatRoutingChipFormat: { role in "\(role) 응답 중…" },
+            nodeGraphProposalHeader: "자식 노드 추천",
+            nodeGraphProposalApprove: "추가",
+            nodeGraphProposalDismiss: "무시",
+            nodeGraphProposalApproveFailedFormat: { reason in "노드 추가 실패: \(reason)" },
+            nodeGraphBranchesHeaderFormat: { count in "분기 옵션 (\(count))" },
+            nodeGraphBranchesApproveAll: "모두 추가",
+            nodeGraphCandidateAdopt: "이 분기 채택",
+            nodeGraphCandidateFold: "접기",
+            nodeGraphCleanupFailedFormat: { reason in "분기 정리 실패: \(reason)" },
+            nodeGraphCandidateMergeFormat: { count in "병합 (분기 \(count)개)" },
+            nodeGraphCandidateMergeConfirmTitleFormat: { count in "분기 \(count)개를 하나로 병합?" },
+            nodeGraphCandidateMergeMessage: "선택한 분기들을 디렉터가 종합해 새 본 가지 노드를 만듭니다. 원본은 보존(archive)됩니다.",
+            nodeGraphCandidateMergeConfirm: "병합",
+            nodeGraphCandidateDiscard: "버리기",
+            nodeGraphCandidateDiscardConfirmTitle: "이 분기를 버릴까요?",
+            nodeGraphCandidateDiscardMessage: "버리면 이 분기가 완전히 사라집니다. 추론 흔적을 남기려면 \"접기\"를 사용하세요.",
+            nodeGraphExportButton: "내보내기",
+            nodeGraphExportSuccessTitle: "내보내기 완료",
+            nodeGraphExportSuccessPathFormat: { path in "저장됨: \(path)" },
+            nodeGraphExportFailedFormat: { reason in "내보내기 실패: \(reason)" }
         ),
         designSession: DesignSession(
             newSession: "새 설계 세션",
