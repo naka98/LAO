@@ -1,0 +1,23 @@
+{
+  "name": "lao",
+  "version": "0.9.0",
+  "description": "LAO (Local AI Office) - CLI Core & Web UI",
+  "main": "cli/dist/index.js",
+  "bin": {
+    "lao": "./cli/dist/index.js"
+  },
+  "scripts": {
+    "prepare": "npm install --prefix cli && npm install --prefix web && npm run build --prefix cli && npm run build --prefix web",
+    "build": "npm run build --prefix cli && npm run build --prefix web",
+    "start": "node cli/dist/index.js"
+  },
+  "keywords": [
+    "lao",
+    "ai",
+    "design",
+    "workflow",
+    "local-ai"
+  ],
+  "author": "naka98",
+  "license": "MIT"
+}
