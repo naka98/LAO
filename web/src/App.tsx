@@ -29,7 +29,7 @@ function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [formProvider, setFormProvider] = useState('gemini');
   const [formModel, setFormModel] = useState('');
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'global' | 'agents'>('global');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'global' | 'agents' | 'devloop'>('global');
   const [formAgents, setFormAgents] = useState<{
     director: { provider: string; model: string };
     specifier: { provider: string; model: string };
@@ -43,6 +43,25 @@ function App() {
     optionizer: { provider: 'gemini', model: '' },
     gapDetector: { provider: 'gemini', model: '' },
   });
+
+  // Right sidebar tab state
+  const [activePanelTab, setActivePanelTab] = useState<'detail' | 'timeline' | 'spec' | 'devloop'>('detail');
+
+  // Decision Timeline States
+  const [decisionLogs, setDecisionLogs] = useState<{ date: string; title: string; reasoning: string }[]>([]);
+  const [isLoadingDecisions, setIsLoadingDecisions] = useState(false);
+
+  // Spec Viewer States
+  const [specMarkdown, setSpecMarkdown] = useState('');
+  const [isLoadingSpec, setIsLoadingSpec] = useState(false);
+
+  // DevLoop Console States
+  const [devLoopLogs, setDevLoopLogs] = useState<{ type: 'stdout' | 'stderr' | 'info' | 'start' | 'exit' | 'error'; text: string }[]>([]);
+  const [activeDevLoopCommand, setActiveDevLoopCommand] = useState<string | null>(null);
+  const [formBuildCommand, setFormBuildCommand] = useState('npm run build');
+  const [formLaunchCommand, setFormLaunchCommand] = useState('npm start');
+  const [formVerifyCommand, setFormVerifyCommand] = useState('npm test');
+  const [formUiCheckCommand, setFormUiCheckCommand] = useState('');
   
   // Routing chip & proposal simulation state
   const [routingStatus, setRoutingStatus] = useState<{
@@ -77,6 +96,12 @@ function App() {
             optionizer: { provider: data.provider, model: data.model },
             gapDetector: { provider: data.provider, model: data.model },
           });
+        }
+        if (data.developerLoop) {
+          setFormBuildCommand(data.developerLoop.buildCommand || 'npm run build');
+          setFormLaunchCommand(data.developerLoop.launchCommand || 'npm start');
+          setFormVerifyCommand(data.developerLoop.verifyCommand || 'npm test');
+          setFormUiCheckCommand(data.developerLoop.uiCheckCommand || '');
         }
       }
     } catch (e) {
@@ -239,6 +264,12 @@ function App() {
           provider: formProvider,
           model: formModel,
           agents: formAgents,
+          developerLoop: {
+            buildCommand: formBuildCommand,
+            launchCommand: formLaunchCommand,
+            verifyCommand: formVerifyCommand,
+            uiCheckCommand: formUiCheckCommand,
+          }
         }),
       });
       if (res.ok) {
@@ -283,50 +314,88 @@ function App() {
     }
   };
 
-  // 4. Send Chat message and handle agent drama routing
+  // 4. Send Chat message and handle agent drama routing (Streaming SSE)
   const handleSendMessage = async (messageText: string) => {
     if (!selectedNodeId) return;
     setIsSending(true);
     setLastProposal(undefined);
 
+    // Append user message locally first for instant feedback
+    const tempUserMsgId = crypto.randomUUID();
+    const userMsg: NodeMessage = {
+      id: tempUserMsgId,
+      nodeId: selectedNodeId,
+      author: 'user',
+      content: messageText,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
     // Trigger routing stage animation
     setRoutingStatus({ isRouting: true });
 
-    try {
-      // Simulate Director routing classification delay for UX drama (0.8s)
-      await new Promise((resolve) => setTimeout(resolve, 800));
+    let tempAgentMsgId = crypto.randomUUID();
+    let currentAgentText = '';
+    
+    const url = `/api/chat/stream?nodeId=${encodeURIComponent(selectedNodeId)}&message=${encodeURIComponent(messageText)}`;
+    const eventSource = new EventSource(url);
 
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId: selectedNodeId, message: messageText }),
-      });
-
-      if (!res.ok) throw new Error('API server returned error');
-      const data = await res.json();
-
-      // Routing finished, show which step agent responded
-      setRoutingStatus({
-        isRouting: false,
-        route: data.route,
-        reasoning: data.reasoning,
-      });
-
-      // Update state
-      setNodes(data.mindmap.nodes);
-      setEdges(data.mindmap.edges);
-      setMessages(data.mindmap.messages);
-
-      // Check if the agent proposed sub-nodes or alternatives
-      if (data.proposal && data.proposal.type !== 'none') {
-        setLastProposal(data.proposal);
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'routing') {
+          setRoutingStatus({
+            isRouting: false,
+            route: data.route,
+            reasoning: data.reasoning,
+          });
+          
+          // Append the agent typing message
+          const initialAgentMsg: NodeMessage = {
+            id: tempAgentMsgId,
+            nodeId: selectedNodeId,
+            author: data.route,
+            content: '',
+            createdAt: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, initialAgentMsg]);
+        } else if (data.type === 'content') {
+          currentAgentText += data.chunk;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempAgentMsgId ? { ...msg, content: currentAgentText } : msg
+            )
+          );
+        } else if (data.type === 'done') {
+          eventSource.close();
+          setNodes(data.mindmap.nodes);
+          setEdges(data.mindmap.edges);
+          setMessages(data.mindmap.messages);
+          if (data.proposal && data.proposal.type !== 'none') {
+            setLastProposal(data.proposal);
+          }
+          setIsSending(false);
+        } else if (data.type === 'error') {
+          console.error('SSE backend error:', data.error);
+          eventSource.close();
+          setRoutingStatus({ isRouting: false });
+          setIsSending(false);
+          // Remove local message on error
+          setMessages((prev) => prev.filter(m => m.id !== tempUserMsgId && m.id !== tempAgentMsgId));
+        }
+      } catch (err) {
+        console.error('SSE parse error:', err);
       }
-    } catch (e) {
-      console.error('Chat error:', e);
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('EventSource error:', err);
+      eventSource.close();
       setRoutingStatus({ isRouting: false });
-    } finally {
       setIsSending(false);
-    }
+      // Remove local message on error
+      setMessages((prev) => prev.filter(m => m.id !== tempUserMsgId && m.id !== tempAgentMsgId));
+    };
   };
 
   // 5. Adopt Node or Create Proposed branch
@@ -583,6 +652,129 @@ function App() {
     }
   };
 
+  // 9b. Fetch and parse decision logs for Timeline Card View
+  const fetchDecisionLogs = async () => {
+    setIsLoadingDecisions(true);
+    try {
+      const res = await fetch('/api/criteria');
+      if (res.ok) {
+        const data = await res.json();
+        const md = data.markdown || '';
+        const entries: { date: string; title: string; reasoning: string }[] = [];
+        
+        const sections = md.split('## [Decision] ');
+        for (const sec of sections) {
+          if (!sec.trim()) continue;
+          const lines = sec.split('\n');
+          const title = lines[0].trim();
+          
+          let date = '';
+          let reasoning = '';
+          
+          for (const line of lines) {
+            if (line.includes('**Date**:')) {
+              date = line.replace(/- \*\*Date\*\*:\s*/, '').trim();
+            } else if (line.includes('**Reasoning**:')) {
+              reasoning = line.replace(/- \*\*Reasoning\*\*:\s*/, '').trim();
+            }
+          }
+          
+          if (!reasoning) {
+            const reasonIdx = sec.indexOf('**Reasoning**:');
+            if (reasonIdx !== -1) {
+              reasoning = sec.substring(reasonIdx + 14).trim();
+            }
+          }
+
+          entries.push({
+            date: date || new Date().toISOString(),
+            title,
+            reasoning: reasoning || 'No reasoning details provided.',
+          });
+        }
+        
+        entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setDecisionLogs(entries);
+      }
+    } catch (e) {
+      console.error('Error fetching criteria log:', e);
+    } finally {
+      setIsLoadingDecisions(false);
+    }
+  };
+
+  // 9c. Fetch and compile spec document
+  const fetchSpecText = async () => {
+    setIsLoadingSpec(true);
+    try {
+      const compileRes = await fetch('/api/compile', { method: 'POST' });
+      if (compileRes.ok) {
+        const data = await compileRes.json();
+        setSpecMarkdown(data.markdown || '');
+      }
+    } catch (e) {
+      console.error('Error fetching spec document:', e);
+    } finally {
+      setIsLoadingSpec(false);
+    }
+  };
+
+  // 9d. Copy Spec to Clipboard
+  const handleCopySpec = () => {
+    navigator.clipboard.writeText(specMarkdown);
+    alert('Spec document copied to clipboard!');
+  };
+
+  // 9e. Download Spec Document
+  const handleDownloadSpec = () => {
+    const element = document.createElement("a");
+    const file = new Blob([specMarkdown], {type: 'text/markdown'});
+    element.href = URL.createObjectURL(file);
+    element.download = "spec_compiled.md";
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  // 9f. Run DevLoop command via SSE
+  const handleRunDevLoopCommand = (kind: 'build' | 'launch' | 'verify' | 'uiCheck') => {
+    setActiveDevLoopCommand(kind);
+    setDevLoopLogs([]);
+    
+    const url = `/api/devloop/run?kind=${kind}`;
+    const eventSource = new EventSource(url);
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'start') {
+          setDevLoopLogs([{ type: 'start', text: `> Running: ${data.command}` }]);
+        } else if (data.type === 'stdout') {
+          setDevLoopLogs((prev) => [...prev, { type: 'stdout', text: data.chunk }]);
+        } else if (data.type === 'stderr') {
+          setDevLoopLogs((prev) => [...prev, { type: 'stderr', text: data.chunk }]);
+        } else if (data.type === 'exit') {
+          setDevLoopLogs((prev) => [...prev, { type: 'exit', text: `\n> Command finished with exit code ${data.code}` }]);
+          eventSource.close();
+          setActiveDevLoopCommand(null);
+        } else if (data.type === 'error') {
+          setDevLoopLogs((prev) => [...prev, { type: 'error', text: `\n> Error: ${data.error}` }]);
+          eventSource.close();
+          setActiveDevLoopCommand(null);
+        }
+      } catch (err) {
+        console.error('DevLoop SSE parse error:', err);
+      }
+    };
+    
+    eventSource.onerror = (err) => {
+      console.error('DevLoop EventSource error:', err);
+      setDevLoopLogs((prev) => [...prev, { type: 'error', text: `\n> EventSource connection closed.` }]);
+      eventSource.close();
+      setActiveDevLoopCommand(null);
+    };
+  };
+
   // 10. Update Node Title/Body Local Handler
   const handleUpdateNode = async (updatedNode: GraphNode) => {
     const updatedNodes = nodes.map(n => n.id === updatedNode.id ? updatedNode : n);
@@ -648,6 +840,12 @@ function App() {
               if (settings.agents) {
                 setFormAgents(settings.agents);
               }
+              if (settings.developerLoop) {
+                setFormBuildCommand(settings.developerLoop.buildCommand || 'npm run build');
+                setFormLaunchCommand(settings.developerLoop.launchCommand || 'npm start');
+                setFormVerifyCommand(settings.developerLoop.verifyCommand || 'npm test');
+                setFormUiCheckCommand(settings.developerLoop.uiCheckCommand || '');
+              }
               setActiveSettingsTab('global');
               setShowSettingsModal(true);
             }}
@@ -688,22 +886,236 @@ function App() {
           onAddFreeNode={handleAddFreeNode}
         />
 
-        {/* Focused Node Side Panel */}
-        {focusedNode && (
-          <NodeDetailPanel
-            node={focusedNode}
-            messages={focusedMessages}
-            candidates={currentNodeCandidates}
-            onSendMessage={handleSendMessage}
-            onAdoptNode={handleAdoptNode}
-            onMergeNodes={handleMergeNodes}
-            onUpdateNode={handleUpdateNode}
-            isSending={isSending}
-            routingStatus={routingStatus}
-            lastProposal={lastProposal}
-            onClearProposal={() => setLastProposal(undefined)}
-          />
-        )}
+        {/* Right Sidebar Container */}
+        <div className="w-[450px] border-l border-slate-800 bg-slate-900/40 backdrop-blur-xl flex min-h-0 relative z-10">
+          
+          {/* Vertical Tab Bar (Left Edge of sidebar) */}
+          <div className="w-12 border-r border-slate-800 bg-slate-950/40 flex flex-col items-center py-4 gap-4 shrink-0">
+            <button
+              onClick={() => setActivePanelTab('detail')}
+              title="Node Detail"
+              className={`p-2 rounded-lg transition-all cursor-pointer ${
+                activePanelTab === 'detail'
+                  ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <Brain size={16} />
+            </button>
+            <button
+              onClick={() => {
+                setActivePanelTab('timeline');
+                fetchDecisionLogs();
+              }}
+              title="Decision Timeline"
+              className={`p-2 rounded-lg transition-all cursor-pointer ${
+                activePanelTab === 'timeline'
+                  ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <BookOpen size={16} />
+            </button>
+            <button
+              onClick={() => {
+                setActivePanelTab('spec');
+                fetchSpecText();
+              }}
+              title="Specification Document"
+              className={`p-2 rounded-lg transition-all cursor-pointer ${
+                activePanelTab === 'spec'
+                  ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <FileText size={16} />
+            </button>
+            <button
+              onClick={() => setActivePanelTab('devloop')}
+              title="Developer Loop Console"
+              className={`p-2 rounded-lg transition-all cursor-pointer ${
+                activePanelTab === 'devloop'
+                  ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <Settings size={16} />
+            </button>
+          </div>
+
+          {/* Panel Content Pane */}
+          <div className="flex-1 flex flex-col min-h-0 bg-slate-900/60 overflow-hidden">
+            {activePanelTab === 'detail' && (
+              focusedNode ? (
+                <NodeDetailPanel
+                  node={focusedNode}
+                  messages={focusedMessages}
+                  candidates={currentNodeCandidates}
+                  onSendMessage={handleSendMessage}
+                  onAdoptNode={handleAdoptNode}
+                  onMergeNodes={handleMergeNodes}
+                  onUpdateNode={handleUpdateNode}
+                  isSending={isSending}
+                  routingStatus={routingStatus}
+                  lastProposal={lastProposal}
+                  onClearProposal={() => setLastProposal(undefined)}
+                />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-2">
+                  <Brain size={32} className="text-slate-700 animate-pulse" />
+                  <p className="text-xs font-semibold">노드 상세 정보</p>
+                  <p className="text-[10px] text-slate-500 max-w-[200px]">캔버스에서 노드를 선택하시면 에이전트 대화 및 대안 관리 패널이 활성화됩니다.</p>
+                </div>
+              )
+            )}
+
+            {activePanelTab === 'timeline' && (
+              <div className="flex-1 flex flex-col min-h-0 p-6">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <BookOpen size={14} className="text-violet-400" /> Decision Timeline
+                </h3>
+                {isLoadingDecisions ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="h-6 w-6 rounded-full border-2 border-slate-800 border-t-violet-500 animate-spin"></div>
+                  </div>
+                ) : decisionLogs.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-center space-y-2">
+                    <p className="text-xs">채택된 의사결정이 없습니다.</p>
+                    <p className="text-[9px] text-slate-650 max-w-[200px]">캔버스에서 자식/후보 노드를 '채택(Adopt)'하면 의사결정 이력이 기록됩니다.</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-1 relative pl-4 border-l border-slate-800/80 scrollbar-thin">
+                    {decisionLogs.map((log, idx) => (
+                      <div key={idx} className="relative space-y-1.5 pb-2">
+                        {/* Timeline dot */}
+                        <div className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-violet-500 border-2 border-slate-900 shadow-[0_0_8px_rgba(139,92,246,0.5)]"></div>
+                        <div className="text-[9px] text-slate-500 font-semibold">{new Date(log.date).toLocaleString()}</div>
+                        <div className="text-xs font-bold text-white leading-snug">{log.title}</div>
+                        <div className="p-2.5 rounded-lg border border-slate-800/60 bg-slate-950/30 text-[10px] text-slate-400 leading-relaxed whitespace-pre-line">{log.reasoning}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activePanelTab === 'spec' && (
+              <div className="flex-1 flex flex-col min-h-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <FileText size={14} className="text-violet-400" /> Compiled Spec
+                  </h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCopySpec}
+                      className="px-2 py-1 rounded border border-slate-850 hover:bg-slate-800 text-[10px] font-bold text-slate-300 cursor-pointer transition-all"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      onClick={handleDownloadSpec}
+                      className="px-2 py-1 rounded bg-violet-600/30 border border-violet-500/30 hover:bg-violet-600/40 text-[10px] font-bold text-violet-300 cursor-pointer transition-all"
+                    >
+                      Download
+                    </button>
+                  </div>
+                </div>
+
+                {isLoadingSpec ? (
+                  <div className="flex-1 flex items-center justify-center">
+                    <div className="h-6 w-6 rounded-full border-2 border-slate-800 border-t-violet-500 animate-spin"></div>
+                  </div>
+                ) : !specMarkdown ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-slate-500 text-center space-y-2">
+                    <p className="text-xs">작성된 명세서가 없습니다.</p>
+                    <button
+                      onClick={fetchSpecText}
+                      className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-[10px] font-bold text-white transition-all cursor-pointer"
+                    >
+                      명세서 생성하기
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto pr-1 bg-slate-950/30 rounded-xl border border-slate-850 p-4 font-mono text-[10px] text-slate-350 leading-relaxed whitespace-pre-wrap select-text scrollbar-thin">
+                    {specMarkdown}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activePanelTab === 'devloop' && (
+              <div className="flex-1 flex flex-col min-h-0 p-6">
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Settings size={14} className="text-violet-400" /> DevLoop Console
+                </h3>
+
+                {/* Grid of command actions */}
+                <div className="grid grid-cols-2 gap-2 mb-4">
+                  {([
+                    { key: 'build', label: 'Build Project', desc: 'npm run build' },
+                    { key: 'verify', label: 'Verify/Test', desc: 'npm run test' },
+                    { key: 'launch', label: 'Launch/Start', desc: 'npm start' },
+                    { key: 'uiCheck', label: 'UI Check', desc: 'ui check' }
+                  ] as const).map(({ key, label, desc }) => {
+                    const presetCmd = settings.developerLoop?.[`${key}Command`] || desc;
+                    const isRunning = activeDevLoopCommand === key;
+                    const isAnyRunning = activeDevLoopCommand !== null;
+                    return (
+                      <button
+                        key={key}
+                        disabled={isAnyRunning && !isRunning}
+                        onClick={() => handleRunDevLoopCommand(key)}
+                        className={`p-3 rounded-xl border text-left flex flex-col justify-between transition-all ${
+                          isRunning
+                            ? 'bg-violet-600/30 border-violet-500 text-white animate-pulse'
+                            : 'bg-slate-950/40 border-slate-850 hover:border-slate-700 text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer'
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-wider">{label}</span>
+                        <span className="text-[9px] text-slate-500 mt-1 font-mono truncate w-full">{presetCmd || 'not configured'}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Console Terminal View */}
+                <div className="flex-1 flex flex-col min-h-0 border border-slate-850 bg-slate-950 rounded-xl overflow-hidden shadow-2xl relative">
+                  {/* Console Header */}
+                  <div className="px-4 py-2 border-b border-slate-850 bg-slate-950 flex justify-between items-center text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                    <span>Console Log Output</span>
+                    <button
+                      onClick={() => setDevLoopLogs([])}
+                      className="text-slate-600 hover:text-slate-400 cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  {/* Console Log Area */}
+                  <div className="flex-1 p-4 font-mono text-[10px] overflow-y-auto space-y-1 select-text scrollbar-thin">
+                    {devLoopLogs.length === 0 ? (
+                      <div className="text-slate-600 italic">No logs. Run a DevLoop command to view output...</div>
+                    ) : (
+                      devLoopLogs.map((log, idx) => {
+                        let colorClass = 'text-slate-400';
+                        if (log.type === 'stderr') colorClass = 'text-red-400 font-semibold';
+                        if (log.type === 'info') colorClass = 'text-violet-400 font-bold';
+                        if (log.type === 'start') colorClass = 'text-cyan-400 font-bold border-b border-slate-800 pb-1 mb-1';
+                        if (log.type === 'exit') colorClass = 'text-emerald-400 font-bold border-t border-slate-800 pt-1 mt-1';
+                        if (log.type === 'error') colorClass = 'text-rose-500 font-black';
+                        return (
+                          <div key={idx} className={`${colorClass} whitespace-pre-wrap`}>
+                            {log.text}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Compile Success Toast Notification */}
         {compileResult && (
@@ -944,7 +1356,7 @@ function App() {
                   className={`flex-1 pb-2.5 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer text-center ${
                     activeSettingsTab === 'global'
                       ? 'text-violet-400 border-b-2 border-violet-500'
-                      : 'text-slate-500 hover:text-slate-350'
+                      : 'text-slate-500 hover:text-slate-355'
                   }`}
                 >
                   Global Default
@@ -959,6 +1371,17 @@ function App() {
                   }`}
                 >
                   Agent Overrides
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveSettingsTab('devloop')}
+                  className={`flex-1 pb-2.5 text-[11px] font-bold uppercase tracking-wider transition-all cursor-pointer text-center ${
+                    activeSettingsTab === 'devloop'
+                      ? 'text-violet-400 border-b-2 border-violet-500'
+                      : 'text-slate-500 hover:text-slate-355'
+                  }`}
+                >
+                  DevLoop Presets
                 </button>
               </div>
 
@@ -1042,6 +1465,66 @@ function App() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {activeSettingsTab === 'devloop' && (
+                <div className="space-y-4 animate-fade-in max-h-[300px] overflow-y-auto pr-1 scrollbar-thin">
+                  <div>
+                    <label htmlFor="buildCommand" className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Build Project Command
+                    </label>
+                    <input
+                      type="text"
+                      id="buildCommand"
+                      value={formBuildCommand}
+                      onChange={(e) => setFormBuildCommand(e.target.value)}
+                      placeholder="e.g. npm run build"
+                      className="w-full px-3.5 py-2.5 rounded-lg border border-slate-800 bg-slate-950/60 text-xs text-white placeholder-slate-700 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="verifyCommand" className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Verify/Test Command
+                    </label>
+                    <input
+                      type="text"
+                      id="verifyCommand"
+                      value={formVerifyCommand}
+                      onChange={(e) => setFormVerifyCommand(e.target.value)}
+                      placeholder="e.g. npm run test"
+                      className="w-full px-3.5 py-2.5 rounded-lg border border-slate-800 bg-slate-950/60 text-xs text-white placeholder-slate-700 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="launchCommand" className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Launch/Start Command
+                    </label>
+                    <input
+                      type="text"
+                      id="launchCommand"
+                      value={formLaunchCommand}
+                      onChange={(e) => setFormLaunchCommand(e.target.value)}
+                      placeholder="e.g. npm start"
+                      className="w-full px-3.5 py-2.5 rounded-lg border border-slate-800 bg-slate-950/60 text-xs text-white placeholder-slate-700 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="uiCheckCommand" className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      UI Check Command (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="uiCheckCommand"
+                      value={formUiCheckCommand}
+                      onChange={(e) => setFormUiCheckCommand(e.target.value)}
+                      placeholder="e.g. npx playwright test"
+                      className="w-full px-3.5 py-2.5 rounded-lg border border-slate-800 bg-slate-950/60 text-xs text-white placeholder-slate-700 outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all"
+                    />
+                  </div>
                 </div>
               )}
 

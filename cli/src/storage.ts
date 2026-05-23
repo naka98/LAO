@@ -8,6 +8,13 @@ export interface AgentSetting {
   model: string;
 }
 
+export interface DeveloperLoopSettings {
+  buildCommand: string;
+  launchCommand: string;
+  verifyCommand: string;
+  uiCheckCommand: string;
+}
+
 export interface SettingsData {
   provider: string;
   model: string;
@@ -18,6 +25,7 @@ export interface SettingsData {
     optionizer: AgentSetting;
     gapDetector: AgentSetting;
   };
+  developerLoop?: DeveloperLoopSettings;
 }
 
 const LAO_DIR_NAME = '.lao';
@@ -65,6 +73,12 @@ export class StorageManager {
           researcher: { provider: defaultGlobalProvider, model: defaultGlobalModel },
           optionizer: { provider: defaultGlobalProvider, model: defaultGlobalModel },
           gapDetector: { provider: defaultGlobalProvider, model: defaultGlobalModel },
+        },
+        developerLoop: {
+          buildCommand: 'npm run build',
+          launchCommand: 'npm start',
+          verifyCommand: 'npm test',
+          uiCheckCommand: '',
         }
       };
       fs.writeFileSync(this.settingsFilePath, JSON.stringify(defaultSettings, null, 2), 'utf8');
@@ -107,11 +121,19 @@ export class StorageManager {
       gapDetector: { provider: prov, model: mod },
     });
 
+    const defaultDevLoop = {
+      buildCommand: 'npm run build',
+      launchCommand: 'npm start',
+      verifyCommand: 'npm test',
+      uiCheckCommand: '',
+    };
+
     if (!fs.existsSync(this.settingsFilePath)) {
       return {
         provider: defaultGlobalProvider,
         model: defaultGlobalModel,
         agents: defaultAgents(defaultGlobalProvider, defaultGlobalModel),
+        developerLoop: defaultDevLoop,
       };
     }
     try {
@@ -144,12 +166,20 @@ export class StorageManager {
         },
       };
 
-      return { provider, model, agents };
+      const developerLoop = {
+        buildCommand: data.developerLoop?.buildCommand !== undefined ? data.developerLoop.buildCommand : 'npm run build',
+        launchCommand: data.developerLoop?.launchCommand !== undefined ? data.developerLoop.launchCommand : 'npm start',
+        verifyCommand: data.developerLoop?.verifyCommand !== undefined ? data.developerLoop.verifyCommand : 'npm test',
+        uiCheckCommand: data.developerLoop?.uiCheckCommand !== undefined ? data.developerLoop.uiCheckCommand : '',
+      };
+
+      return { provider, model, agents, developerLoop };
     } catch (e) {
       return {
         provider: defaultGlobalProvider,
         model: defaultGlobalModel,
         agents: defaultAgents(defaultGlobalProvider, defaultGlobalModel),
+        developerLoop: defaultDevLoop,
       };
     }
   }

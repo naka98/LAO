@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { execFile } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import * as dotenv from 'dotenv';
@@ -97,6 +97,7 @@ export class GeminiClient {
     jsonMode?: boolean;
     model?: string;
     role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
+    onChunk?: (chunk: string) => void;
   }): Promise<string> {
     let provider = this.defaultProvider;
     let model = params.model || this.defaultModel;
@@ -235,11 +236,48 @@ export class GeminiClient {
 
       console.log(`[LAO Core] Executing local CLI command: ${command}`);
 
-      // 5. Execute command using zsh interactive/login shell
-      const { stdout, stderr } = await execFilePromise('/bin/zsh', ['-lc', command], {
+      // 5. Execute command using zsh interactive/login shell via spawn to support stdout streaming
+      const child = spawn('/bin/zsh', ['-lc', command], {
         cwd: process.cwd(),
         env,
       });
+
+      let stdout = '';
+      let stderr = '';
+
+      if (child.stdout) {
+        child.stdout.on('data', (data) => {
+          const chunk = data.toString();
+          stdout += chunk;
+          if (params.onChunk) {
+            params.onChunk(chunk);
+          }
+        });
+      }
+
+      if (child.stderr) {
+        child.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+      }
+
+      const exitCode = await new Promise<number>((resolve) => {
+        child.on('close', (code) => {
+          resolve(code ?? 0);
+        });
+        child.on('error', (err) => {
+          console.error('[LAO Core] Spawn error:', err);
+          resolve(-1);
+        });
+      });
+
+      if (exitCode !== 0) {
+        const error = new Error(`Command failed with exit code ${exitCode}`) as any;
+        error.code = exitCode;
+        error.stderr = stderr;
+        error.stdout = stdout;
+        throw error;
+      }
 
       let output = stdout.trim();
 

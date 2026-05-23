@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { StorageManager } from './storage';
 import { AgentOrchestrator } from './agents/orchestrator';
 import { SpecCompiler } from './compiler';
@@ -38,6 +38,60 @@ app.post('/api/mindmap', (req, res) => {
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Send Message / AI Agent Chat & Routing (Streaming SSE)
+app.get('/api/chat/stream', async (req, res) => {
+  try {
+    const { nodeId, message } = req.query;
+    if (!nodeId || !message) {
+      return res.status(400).send('nodeId and message are required');
+    }
+
+    const nodeIdStr = String(nodeId);
+    const messageStr = String(message);
+
+    const data = storage.readMindmap();
+    const seedNode = data.nodes.find(n => n.kind === 'seed');
+    const projectName = seedNode ? seedNode.title : path.basename(PROJECT_ROOT);
+    const projectDesc = data.userProfile?.bio || '';
+
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const result = await orchestrator.routeAndRespondStream({
+      data,
+      projectName,
+      projectDesc,
+      focusedNodeId: nodeIdStr,
+      userMessage: messageStr,
+      onChunk: (chunkEvent) => {
+        res.write(`data: ${JSON.stringify(chunkEvent)}\n\n`);
+      }
+    });
+
+    // Save final updated data
+    storage.writeMindmap(result.updatedData);
+
+    // Send final completed payload
+    const finalEvent = {
+      type: 'done',
+      route: result.route,
+      reasoning: result.reasoning,
+      prose: result.prose,
+      proposal: result.proposal,
+      mindmap: result.updatedData,
+    };
+    res.write(`data: ${JSON.stringify(finalEvent)}\n\n`);
+    res.end();
+  } catch (error: any) {
+    console.error('Chat Stream API Error:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    res.end();
   }
 });
 
@@ -191,7 +245,7 @@ app.get('/api/settings', (req, res) => {
 // 9. Save CLI settings
 app.post('/api/settings', (req, res) => {
   try {
-    const { provider, model, agents } = req.body;
+    const { provider, model, agents, developerLoop } = req.body;
     if (!provider) {
       return res.status(400).json({ error: 'provider is required' });
     }
@@ -199,11 +253,78 @@ app.post('/api/settings', (req, res) => {
       provider,
       model: model || '',
       agents,
+      developerLoop,
     };
     storage.writeSettings(updatedSettings);
     res.json({ success: true, settings: updatedSettings });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 10. Run Developer Loop shell commands (Streaming SSE console logs)
+app.get('/api/devloop/run', async (req, res) => {
+  try {
+    const { kind } = req.query;
+    if (!kind || !['build', 'launch', 'verify', 'uiCheck'].includes(kind as string)) {
+      return res.status(400).send('invalid command kind');
+    }
+
+    const settings = storage.readSettings();
+    const devLoop = settings.developerLoop || {
+      buildCommand: 'npm run build',
+      launchCommand: 'npm start',
+      verifyCommand: 'npm test',
+      uiCheckCommand: ''
+    };
+
+    let command = '';
+    if (kind === 'build') command = devLoop.buildCommand;
+    else if (kind === 'launch') command = devLoop.launchCommand;
+    else if (kind === 'verify') command = devLoop.verifyCommand;
+    else if (kind === 'uiCheck') command = devLoop.uiCheckCommand;
+
+    if (!command.trim()) {
+      return res.status(400).send('Command is not configured');
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    res.write(`data: ${JSON.stringify({ type: 'start', command })}\n\n`);
+
+    const child = spawn('/bin/zsh', ['-lc', command], {
+      cwd: PROJECT_ROOT,
+      env: process.env,
+    });
+
+    if (child.stdout) {
+      child.stdout.on('data', (data) => {
+        res.write(`data: ${JSON.stringify({ type: 'stdout', chunk: data.toString() })}\n\n`);
+      });
+    }
+
+    if (child.stderr) {
+      child.stderr.on('data', (data) => {
+        res.write(`data: ${JSON.stringify({ type: 'stderr', chunk: data.toString() })}\n\n`);
+      });
+    }
+
+    child.on('close', (code) => {
+      res.write(`data: ${JSON.stringify({ type: 'exit', code: code ?? 0 })}\n\n`);
+      res.end();
+    });
+
+    child.on('error', (err) => {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
+      res.end();
+    });
+  } catch (error: any) {
+    console.error('DevLoop Execution error:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    res.end();
   }
 });
 

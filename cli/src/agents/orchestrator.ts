@@ -127,6 +127,119 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Routes the client message and streams response from the designated step agent.
+   */
+  public async routeAndRespondStream(params: {
+    data: MindmapData;
+    projectName: string;
+    projectDesc: string;
+    focusedNodeId: string;
+    userMessage: string;
+    onChunk: (data: { type: 'routing' | 'content'; route?: string; reasoning?: string; chunk?: string }) => void;
+  }): Promise<RouteAndRespondResult> {
+    const data = JSON.parse(JSON.stringify(params.data)) as MindmapData; // deep clone
+    const focusedNode = data.nodes.find(n => n.id === params.focusedNodeId);
+    if (!focusedNode) {
+      throw new Error(`Focused node not found: ${params.focusedNodeId}`);
+    }
+
+    const seedNode = data.nodes.find(n => n.kind === 'seed') || focusedNode;
+
+    // Filter chat history for this node
+    const nodeHistory = data.messages.filter(m => m.nodeId === params.focusedNodeId);
+
+    // Save user message to history first
+    const userMsgId = randomUUID();
+    const now = new Date().toISOString();
+    const userMsg: NodeMessage = {
+      id: userMsgId,
+      nodeId: params.focusedNodeId,
+      author: 'user',
+      content: params.userMessage,
+      createdAt: now,
+    };
+    data.messages.push(userMsg);
+    nodeHistory.push(userMsg);
+
+    // 1. Director Routing
+    const directorPrompt = PromptBuilder.buildDirectorRoutingPrompt({
+      projectName: params.projectName,
+      projectDesc: params.projectDesc,
+      ideaTitle: seedNode.title,
+      focusedNode,
+      chatHistory: nodeHistory.slice(0, -1), // skip the latest user msg for classification context
+      userMessage: params.userMessage,
+    });
+
+    let route: 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' = 'specifier';
+    let routingReason = 'Vague intent fallback';
+
+    try {
+      const directorResponseRaw = await this.geminiClient.generateText({
+        prompt: directorPrompt,
+        jsonMode: true,
+        role: 'director',
+      });
+
+      const parsedRouting = JSON.parse(directorResponseRaw);
+      if (
+        parsedRouting.route &&
+        ['specifier', 'researcher', 'optionizer', 'gapDetector'].includes(parsedRouting.route)
+      ) {
+        route = parsedRouting.route;
+        routingReason = parsedRouting.reasoning || '';
+      }
+    } catch (e) {
+      console.warn('Director routing failed or parsed incorrectly. Falling back to specifier.', e);
+    }
+
+    // Call onChunk with the classification result so the UI updates the routing chip
+    params.onChunk({ type: 'routing', route, reasoning: routingReason });
+
+    // 2. Step Agent Response
+    const stepPrompt = PromptBuilder.buildStepPrompt({
+      agentType: route,
+      projectName: params.projectName,
+      projectDesc: params.projectDesc,
+      ideaTitle: seedNode.title,
+      focusedNode,
+      chatHistory: nodeHistory,
+      userProfile: data.userProfile || { name: 'Designer', title: 'Product Creator', bio: '' },
+    });
+
+    const stepResponseRaw = await this.geminiClient.generateText({
+      prompt: stepPrompt,
+      jsonMode: false,
+      role: route,
+      onChunk: (chunk) => params.onChunk({ type: 'content', chunk }),
+    });
+
+    // 3. Extract Optional Proposals
+    const { prose, kind } = PromptBuilder.extractAnyProposal(stepResponseRaw);
+
+    // 4. Save Agent Message to history
+    const agentMsgId = randomUUID();
+    const agentMsg: NodeMessage = {
+      id: agentMsgId,
+      nodeId: params.focusedNodeId,
+      author: route as NodeMessageAuthor,
+      content: prose,
+      createdAt: new Date().toISOString(),
+    };
+    data.messages.push(agentMsg);
+
+    focusedNode.updatedAt = new Date().toISOString();
+
+    return {
+      route,
+      reasoning: routingReason,
+      prose,
+      proposal: kind,
+      updatedData: data,
+    };
+  }
+
+  /**
    * Generates comparative reasoning when user adopts a node, saving the log.
    */
   public async generateAdoptionReason(params: {
