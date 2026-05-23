@@ -4,6 +4,15 @@ LAO is a platform-independent, developer-first AI design workflow application bu
 
 ---
 
+## Architecture Transition Rationale (macOS Native -> CLI + WebUI)
+
+LAO was originally designed as a macOS-native SwiftUI application. In v0.9, we successfully migrated to a **Node.js Express CLI + React Flow Web UI** architecture to resolve key technical and operational challenges:
+1. **Cross-Platform Portability**: Moving away from macOS-specific system frameworks ensures developers on Windows, Linux, and macOS can run and benefit from the local AI office workspace seamlessly.
+2. **Robust Local DevLoop Integration**: Spawning subprocesses and piping stdout/stderr streams to the browser is significantly more reliable and flexible under a Node.js runtime compared to macOS sandbox restrictions.
+3. **Enhanced Visualization & UX**: Leveraging the React Flow ecosystem allowed us to create a highly responsive, custom-themed interactive canvas that handles dynamic branch sprouting, merging, and layout calculations efficiently.
+
+---
+
 ## Key Features
 
 1. **Local CLI AI Engine**: Executes queries using your locally configured CLI clients (`claude`, `gemini`, `codex`) via shell processes. All prompt contents are handled through secure temp files to circumvent terminal length constraints.
