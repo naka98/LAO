@@ -75,9 +75,9 @@ When the office makes a professional judgment, it records the reason. The client
 
 How the design philosophy manifests at each stage.
 
-### 3.1 Exploration (IdeaBoard)
+### 3.1 Exploration (Intake Wizard)
 
-Goal of this stage: help the client **decide a direction.**
+Goal of this stage: help the client **decide a project direction.**
 
 **The quality of the expert panel's questions is the office's skill.**
 
@@ -88,7 +88,7 @@ Goal of this stage: help the client **decide a direction.**
 | Make them choosable through specifics | Not abstract pros/cons — show concretely what changes when each direction is picked |
 | Leave rationale when converging | State why this direction is recommended, which elements were borrowed from others, and what was given up |
 
-### 3.2 Coordination (Design Canvas)
+### 3.2 Coordination (Decision Cards)
 
 Goal of this stage: **efficiently resolve** decisions that need the client's input.
 
@@ -115,9 +115,9 @@ Goal of this stage: produce a detailed design document the developer can **imple
 | Leave implementation notes | Include architectural patterns, performance considerations, security checkpoints — guidance needed for implementation but not visible in the spec |
 | Name assumptions explicitly | When filling information absent from the context, mark it as "Assumption: ~" so the client can validate |
 
-### 3.4 Handoff (MCP Handoff)
+### 3.4 Handoff (Markdown Handoff)
 
-> Implementation details (export artifacts, `.mcp.json` registration, MCP server surface) — see [handoff.md](handoff.md). This section covers principles only.
+> Implementation details (export artifacts, compiled specs) — see [handoff.md](handoff.md). This section covers principles only.
 
 Goal of this stage: the development AI **receives the design intent accurately** and begins implementation.
 
@@ -125,10 +125,10 @@ Goal of this stage: the development AI **receives the design intent accurately**
 
 | Principle | Description |
 |-----------|-------------|
-| Self-contained | Implementation can begin by reading the design document alone. No need to reference prior conversation or external documents. |
-| Relationships between items are explicit | Screen transitions (e.g., "login screen → main dashboard"), data flows, and state changes are explicit in the Work Graph |
-| Priorities are fixed | What to build first can be determined from parallelGroup and dependency relationships |
-| Resilient to compression | As structured JSON, core information is preserved after LLM context compression |
+| Self-contained | Implementation can begin by reading the design document (`spec_compiled.md`) alone. No need to reference prior conversation or external documents. |
+| Relationships between items are explicit | Screen transitions (e.g., "login screen → main dashboard"), data flows, and state changes are explicit in the specifications |
+| Priorities are fixed | What to build first can be determined from dependency relationships |
+| Resilient to context limits | Core information is structured cleanly to fit in LLM contexts |
 
 ---
 
@@ -155,7 +155,7 @@ A design document that fails these standards is not delivered.
 - [ ] **Data fields** referenced in screen specs exist in the data model
 - [ ] API response schemas include the **fields screens need**
 - [ ] **Screen references** in user flows match actual screen specs
-- [ ] Work Graph **relationships** don't contradict the spec content
+- [ ] Feature specifications **don't contradict** the core spec content
 
 ### 4.4 Executability
 
@@ -170,7 +170,7 @@ A design document that fails these standards is not delivered.
 
 ### 5.1 What the Office Decides (Professional Judgment)
 
-Records the reason in `implementation_notes` or as a resolved `uncertainty` entry.
+Records the reason in `implementation_notes` or as a resolved `Decision Card` entry.
 
 - Technical implementation (caching strategy, pagination approach, index design, etc.)
 - UI pattern choice (modal vs. page, tabs vs. accordion — when an industry standard exists)

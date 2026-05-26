@@ -215,4 +215,4 @@ Role separation
 
 Output pipeline
 
-Screen plan → Common reference document → Development design draft → Delivered to development AI via MCP
+Screen plan → Common reference document → Development design draft → Delivered to development AI via Compiled Markdown
