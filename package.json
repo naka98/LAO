@@ -7,10 +7,14 @@
     "lao": "./cli/dist/index.js"
   },
   "scripts": {
-    "prepare": "npm install --prefix cli && npm install --prefix web && npm run build --prefix cli && npm run build --prefix web",
-    "build": "npm run build --prefix cli && npm run build --prefix web",
+    "prepare": "node prepare.js",
+    "build": "node prepare.js --build-only",
     "start": "node cli/dist/index.js"
   },
+  "files": [
+    "cli/dist",
+    "web/dist"
+  ],
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "cors": "^2.8.6",
