@@ -48,9 +48,10 @@ export class StorageManager {
     // Config file
     if (!fs.existsSync(this.configFilePath)) {
       const defaultGlobalProvider = (process.env.LAO_PROVIDER || 'gemini').toLowerCase();
-      const defaultGlobalModel = process.env.LAO_MODEL || '';
+      const defaultGlobalModel = process.env.LAO_MODEL || 'gemini-2.5-flash';
       
       const defaultConfig: ProjectConfig = {
+        sprouted: false,
         projectName,
         projectDesc,
         automationLevel: 'supervised',

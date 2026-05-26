@@ -561,8 +561,8 @@ export default function App() {
   // Render Loader screen during initialization
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 p-6">
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start md:justify-center text-slate-100 p-6 overflow-y-auto">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden my-auto">
           <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-emerald-500/10 animate-pulse pointer-events-none" />
           <Loader2 className="w-12 h-12 text-violet-500 animate-spin mx-auto mb-6" />
           <h2 className="text-xl font-bold text-slate-200 mb-2">{t.loadingSpecs}</h2>
@@ -573,9 +573,9 @@ export default function App() {
   }
 
   // Render Intake Wizard if no active project config exists
-  if (!config || !config.projectName) {
+  if (!config || !config.sprouted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
         {/* Language switcher on top right */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <button
@@ -588,7 +588,7 @@ export default function App() {
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
         
-        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden">
+        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto">
           <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -608,6 +608,7 @@ export default function App() {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.projectNameLabel}</label>
               <input
+                id="project-name-input"
                 type="text"
                 placeholder={t.projectNamePlaceholder}
                 value={intakeProjectName}
@@ -621,6 +622,7 @@ export default function App() {
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.roughIdeaLabel}</label>
               <textarea
+                id="project-desc-input"
                 placeholder={t.roughIdeaPlaceholder}
                 value={intakeDesc}
                 onChange={e => setIntakeDesc(e.target.value)}
@@ -706,6 +708,7 @@ export default function App() {
           </div>
 
           <button
+            id="sprout-submit-btn"
             type="submit"
             className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 px-6 rounded-xl mt-6 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
           >
@@ -729,12 +732,12 @@ export default function App() {
   const pendingDecisions = decisions.filter(d => d.status === 'pending');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col font-sans overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_-10%,rgba(120,119,198,0.15),rgba(255,255,255,0))] pointer-events-none" />
 
       {/* Header Bar */}
-      <header className="relative z-10 border-b border-slate-900 bg-slate-950/60 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <header className="relative z-10 border-b border-slate-900 bg-slate-950/60 backdrop-blur-md px-6 py-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex items-center gap-3 w-full md:w-auto justify-center md:justify-start">
           <div className="p-2.5 bg-violet-500/10 border border-violet-500/20 rounded-xl">
             <Brain className="w-6 h-6 text-violet-400" />
           </div>
@@ -745,7 +748,7 @@ export default function App() {
         </div>
 
         {/* Phase / Lock Gate & Controls */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 md:gap-4 w-full md:w-auto">
           
           {/* Dynamic Language Switcher */}
           <button
@@ -768,6 +771,7 @@ export default function App() {
 
           {/* Start Dev Transition CTA */}
           <button
+            id="phase-lock-btn"
             onClick={togglePhaseLock}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-md ${
               config.phase === 'development'
@@ -790,9 +794,9 @@ export default function App() {
       </header>
 
       {/* Main split-screen panel */}
-      <main className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
         {/* Left Side: Wizard / Decision Cards deck & Chat */}
-        <div className="w-2/5 border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-auto">
+        <div className="w-full md:w-2/5 flex-none md:flex-initial border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-visible md:overflow-y-auto min-h-[450px] md:min-h-0">
           {/* 1. Decision Card Section */}
           <div className="flex-none">
             <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
@@ -839,7 +843,7 @@ export default function App() {
           </div>
 
           {/* 2. Interactive Agent Chat Widget */}
-          <div className="flex-1 flex flex-col bg-slate-900/30 border border-slate-900 rounded-2xl overflow-hidden min-h-[300px]">
+          <div className="flex-1 flex flex-col bg-slate-900/30 border border-slate-900 rounded-2xl overflow-visible md:overflow-hidden min-h-[350px]">
             {/* Chat header */}
             <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
@@ -861,7 +865,7 @@ export default function App() {
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 p-4 overflow-y-auto space-y-4 text-xs">
+            <div className="flex-1 p-4 overflow-y-visible md:overflow-y-auto space-y-4 text-xs">
               {messages.length === 0 ? (
                 <div className="text-center text-slate-600 mt-10">
                   Discuss or refine the sprouted spec here. Ask questions, request new features, or technical clarifications.
@@ -910,7 +914,7 @@ export default function App() {
         </div>
 
         {/* Right Side: Document Tabs Workspace */}
-        <div className="flex-1 flex flex-col bg-slate-950">
+        <div className="w-full md:w-auto flex-none md:flex-1 flex flex-col bg-slate-950 min-h-[550px] md:min-h-0">
           {/* Tab buttons */}
           <div className="bg-slate-950/40 border-b border-slate-900 px-6 py-2 flex items-center justify-between">
             <div className="flex gap-4">
@@ -940,6 +944,7 @@ export default function App() {
 
             {/* Mini Audit Trigger */}
             <button
+              id="gap-audit-btn"
               onClick={runGapAuditor}
               disabled={isAuditing}
               className="flex items-center gap-1 px-3 py-1 bg-slate-900 border border-slate-850 hover:bg-slate-800 rounded-lg text-[10px] text-slate-400 font-bold transition-all disabled:opacity-50"
@@ -950,7 +955,7 @@ export default function App() {
           </div>
 
           {/* Tab Contents */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-visible md:overflow-y-auto p-6">
             
             {/* A. Live Compiled Spec Viewer */}
             {activeTab === 'spec' && (
@@ -995,6 +1000,7 @@ export default function App() {
                             {t.cancelBtn}
                           </button>
                           <button
+                            id="save-spec-btn"
                             onClick={() => handleSaveEdit(section.id)}
                             className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-bold"
                           >
@@ -1018,7 +1024,7 @@ export default function App() {
 
             {/* B. DevLoop Console Tab */}
             {activeTab === 'devloop' && (
-              <div className="h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
+              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
                 {/* Console actions */}
                 <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2">
                   <button
@@ -1048,7 +1054,7 @@ export default function App() {
                 </div>
 
                 {/* Logs Screen */}
-                <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text min-h-[300px]">
+                <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text">
                   {consoleLogs.length === 0 ? (
                     <div className="text-slate-700 italic">{t.consoleIdle}</div>
                   ) : (
@@ -1110,8 +1116,8 @@ export default function App() {
 
       {/* Settings Modal */}
       {showSettings && formConfig && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={saveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl relative">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+          <form onSubmit={saveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl relative my-auto">
             <button
               type="button"
               onClick={() => setShowSettings(false)}

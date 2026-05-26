@@ -37,6 +37,7 @@ export interface AgentSetting {
 }
 
 export interface ProjectConfig {
+  sprouted?: boolean;
   projectName: string;
   projectDesc: string;
   automationLevel: 'supervised' | 'interactive' | 'autopilot';

@@ -25,16 +25,46 @@ export class AgentOrchestrator {
    * Helper to clean markdown JSON fences before parsing
    */
   private cleanJsonResponse(raw: string): string {
-    let cleaned = raw.trim();
-    if (cleaned.startsWith('```json')) {
-      cleaned = cleaned.substring(7);
-    } else if (cleaned.startsWith('```')) {
-      cleaned = cleaned.substring(3);
+    const cleaned = raw.trim();
+    
+    // 1. Find ```json block
+    const jsonMarker = '```json';
+    const jsonIndex = cleaned.indexOf(jsonMarker);
+    if (jsonIndex !== -1) {
+      const start = jsonIndex + jsonMarker.length;
+      const end = cleaned.indexOf('```', start);
+      if (end !== -1) {
+        return cleaned.substring(start, end).trim();
+      }
+      return cleaned.substring(start).trim();
     }
-    if (cleaned.endsWith('```')) {
-      cleaned = cleaned.substring(0, cleaned.length - 3);
+
+    // 2. Find generic ``` block
+    const genericMarker = '```';
+    const genericIndex = cleaned.indexOf(genericMarker);
+    if (genericIndex !== -1) {
+      const start = genericIndex + genericMarker.length;
+      const end = cleaned.indexOf('```', start);
+      if (end !== -1) {
+        return cleaned.substring(start, end).trim();
+      }
+      return cleaned.substring(start).trim();
     }
-    return cleaned.trim();
+    
+    // 3. Fallback to outer brackets/braces
+    const firstBrace = cleaned.indexOf('{');
+    const firstBracket = cleaned.indexOf('[');
+    if (firstBrace !== -1 || firstBracket !== -1) {
+      const start = firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket) ? firstBrace : firstBracket;
+      const lastBrace = cleaned.lastIndexOf('}');
+      const lastBracket = cleaned.lastIndexOf(']');
+      const end = lastBrace > lastBracket ? lastBrace + 1 : lastBracket + 1;
+      if (end > start) {
+        return cleaned.substring(start, end).trim();
+      }
+    }
+
+    return cleaned;
   }
 
   /**
@@ -84,17 +114,37 @@ export class AgentOrchestrator {
     const parsed = JSON.parse(cleaned);
 
     const now = new Date().toISOString();
-    const features: SpecSection[] = (parsed.features || []).map((f: any) => ({
-      id: f.id || randomUUID().substring(0, 8),
-      title: f.title || 'Untitled Feature',
-      content: f.content || '',
-      status: 'active',
-      createdAt: now,
-      updatedAt: now
-    }));
+
+    // 1. Resolve coreSpec as a Markdown string
+    let coreSpecStr = '';
+    if (parsed.coreSpec) {
+      if (typeof parsed.coreSpec === 'object') {
+        coreSpecStr = Object.entries(parsed.coreSpec)
+          .map(([key, val]) => `## ${key}\n\n${val}`)
+          .join('\n\n');
+      } else {
+        coreSpecStr = String(parsed.coreSpec);
+      }
+    } else {
+      coreSpecStr = `# Core Spec\n\nConforming to Golden Rules.`;
+    }
+
+    // 2. Map feature array fields dynamically
+    const features: SpecSection[] = (parsed.features || []).map((f: any) => {
+      const title = f.title || f.name || 'Untitled Feature';
+      const content = f.content || f.description || f.requirements || '';
+      return {
+        id: f.id || randomUUID().substring(0, 8),
+        title,
+        content: typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content),
+        status: 'active',
+        createdAt: now,
+        updatedAt: now
+      };
+    });
 
     return {
-      coreSpec: parsed.coreSpec || `# Core Spec\n\nConforming to Golden Rules.`,
+      coreSpec: coreSpecStr,
       features
     };
   }

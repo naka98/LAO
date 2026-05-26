@@ -244,6 +244,9 @@ app.post('/api/project/intake', async (req, res) => {
 
     // Initialize config
     const config = storage.initStorage(String(projectName), String(projectDesc));
+    config.projectName = String(projectName);
+    config.projectDesc = String(projectDesc);
+    config.sprouted = true;
     config.automationLevel = automationLevel || 'supervised';
     if (goldenRules) {
       config.goldenRules = goldenRules;
