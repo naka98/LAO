@@ -14,6 +14,7 @@ export class StorageManager {
   private criteriaFilePath: string;
   private compiledSpecFilePath: string;
   private messagesFilePath: string;
+  private taskFilePath: string;
 
   constructor(projectRoot: string) {
     this.laoDirPath = path.join(projectRoot, LAO_DIR_NAME);
@@ -24,6 +25,7 @@ export class StorageManager {
     this.criteriaFilePath = path.join(this.laoDirPath, 'criteria.md');
     this.compiledSpecFilePath = path.join(this.laoDirPath, 'spec_compiled.md');
     this.messagesFilePath = path.join(this.laoDirPath, 'messages.json');
+    this.taskFilePath = path.join(this.laoDirPath, 'task.md');
   }
 
   /**
@@ -308,5 +310,89 @@ export class StorageManager {
   public writeCompiledSpec(markdownContent: string): string {
     fs.writeFileSync(this.compiledSpecFilePath, markdownContent, 'utf8');
     return this.compiledSpecFilePath;
+  }
+
+  /**
+   * Reads task.md raw content
+   */
+  public readTasksRaw(): string {
+    if (!fs.existsSync(this.taskFilePath)) {
+      return '';
+    }
+    return fs.readFileSync(this.taskFilePath, 'utf8');
+  }
+
+  /**
+   * Writes task.md raw content
+   */
+  public writeTasksRaw(markdown: string): void {
+    fs.writeFileSync(this.taskFilePath, markdown, 'utf8');
+  }
+
+  /**
+   * Reads task.md and parses tasks list
+   */
+  public readTasksParsed(): { index: number; text: string; status: 'todo' | 'in_progress' | 'done' }[] {
+    const raw = this.readTasksRaw();
+    if (!raw) return [];
+
+    const lines = raw.split('\n');
+    const tasks: { index: number; text: string; status: 'todo' | 'in_progress' | 'done' }[] = [];
+
+    lines.forEach((line, index) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('- [ ]')) {
+        tasks.push({
+          index,
+          text: trimmed.substring(5).trim(),
+          status: 'todo'
+        });
+      } else if (trimmed.startsWith('- [/]')) {
+        tasks.push({
+          index,
+          text: trimmed.substring(5).trim(),
+          status: 'in_progress'
+        });
+      } else if (trimmed.startsWith('- [x]') || trimmed.startsWith('- [X]')) {
+        tasks.push({
+          index,
+          text: trimmed.substring(5).trim(),
+          status: 'done'
+        });
+      }
+    });
+
+    return tasks;
+  }
+
+  /**
+   * Updates status of a task by changing the markdown line checkbox
+   */
+  public updateTaskStatus(index: number, status: 'todo' | 'in_progress' | 'done'): void {
+    const raw = this.readTasksRaw();
+    if (!raw) return;
+
+    const lines = raw.split('\n');
+    if (index < 0 || index >= lines.length) return;
+
+    const line = lines[index];
+    const trimmed = line.trim();
+    let prefix = '- [ ]';
+    if (status === 'in_progress') prefix = '- [/]';
+    else if (status === 'done') prefix = '- [x]';
+
+    // Preserve leading whitespace
+    const leadingWhitespace = line.substring(0, line.indexOf('-'));
+    
+    // Extract actual content of task
+    let content = '';
+    if (trimmed.startsWith('- [ ]') || trimmed.startsWith('- [/]') || trimmed.startsWith('- [x]') || trimmed.startsWith('- [X]')) {
+      content = trimmed.substring(5).trim();
+    } else {
+      return; // Not a valid task checkbox line
+    }
+
+    lines[index] = `${leadingWhitespace}${prefix} ${content}`;
+    this.writeTasksRaw(lines.join('\n'));
   }
 }

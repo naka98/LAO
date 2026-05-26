@@ -7,7 +7,7 @@ import { exec, spawn } from 'child_process';
 import { StorageManager } from './storage';
 import { AgentOrchestrator } from './agents/orchestrator';
 import { SpecCompiler } from './compiler';
-import { activeProcesses, getShellInfo } from './gemini';
+import { activeProcesses, getShellInfo, GeminiClient } from './gemini';
 import { randomUUID } from 'crypto';
 import { NodeMessage } from './models';
 
@@ -47,7 +47,7 @@ app.post('/api/project/config', (req, res) => {
 });
 
 // 3. Switch Project Phase (Lock/Unlock specs)
-app.post('/api/project/phase', (req, res) => {
+app.post('/api/project/phase', async (req, res) => {
   try {
     const { phase } = req.body;
     if (!phase || !['planning', 'development'].includes(phase)) {
@@ -56,7 +56,19 @@ app.post('/api/project/phase', (req, res) => {
     const config = storage.readConfig();
     config.phase = phase;
     storage.writeConfig(config);
-    res.json({ success: true, config });
+
+    let tasksGenerated = false;
+    if (phase === 'development') {
+      const existingTasks = storage.readTasksRaw();
+      if (!existingTasks.trim()) {
+        const sections = storage.readSpecs();
+        const generatedTasks = await orchestrator.runTaskSprout(config, sections);
+        storage.writeTasksRaw(generatedTasks);
+        tasksGenerated = true;
+      }
+    }
+
+    res.json({ success: true, config, tasksGenerated });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -447,24 +459,54 @@ app.get('/api/devloop/run', async (req, res) => {
       env: process.env,
     });
 
+    let accumulatedStdout = '';
+    let accumulatedStderr = '';
+
     if (child.stdout) {
       child.stdout.on('data', (data) => {
-        res.write(`data: ${JSON.stringify({ type: 'stdout', chunk: data.toString() })}\n\n`);
+        const chunk = data.toString();
+        accumulatedStdout += chunk;
+        res.write(`data: ${JSON.stringify({ type: 'stdout', chunk })}\n\n`);
       });
     }
 
     if (child.stderr) {
       child.stderr.on('data', (data) => {
-        res.write(`data: ${JSON.stringify({ type: 'stderr', chunk: data.toString() })}\n\n`);
+        const chunk = data.toString();
+        accumulatedStderr += chunk;
+        res.write(`data: ${JSON.stringify({ type: 'stderr', chunk })}\n\n`);
       });
     }
 
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
+      if (code !== 0) {
+        try {
+          const geminiClient = new GeminiClient();
+          const prompt = `실행한 명령어: ${command}\n\n[실행 로그 (stderr)]\n${accumulatedStderr}\n\n[실행 로그 (stdout)]\n${accumulatedStdout}\n\n위 명령어가 실행 중 실패했습니다. 개발자가 이 에러를 쉽게 이해하고 대처할 수 있도록, 원인 분석과 대처 방법을 친절하고 구체적인 한국어(Korean)로 설명해주세요.`;
+          
+          res.write(`data: ${JSON.stringify({ type: 'stdout', chunk: '\n[AI 오류 분석 시작...]\n' })}\n\n`);
+          const explanation = await geminiClient.generateText({
+            prompt,
+          });
+          res.write(`data: ${JSON.stringify({ type: 'explanation', text: explanation })}\n\n`);
+        } catch (e: any) {
+          console.error('[LAO Core] AI explanation error:', e);
+          res.write(`data: ${JSON.stringify({ type: 'explanation', text: `AI 오류 분석 중 에러가 발생했습니다: ${e.message}` })}\n\n`);
+        }
+      }
       res.write(`data: ${JSON.stringify({ type: 'exit', code: code ?? 0 })}\n\n`);
       res.end();
     });
 
-    child.on('error', (err) => {
+    child.on('error', async (err) => {
+      try {
+        const geminiClient = new GeminiClient();
+        const prompt = `실행하려던 명령어: ${command}\n\n오류 내용:\n${err.message}\n\n명령어를 실행하지 못하고 spawn 에러가 발생했습니다. 원인과 해결 방법을 한국어로 설명해주세요.`;
+        const explanation = await geminiClient.generateText({ prompt });
+        res.write(`data: ${JSON.stringify({ type: 'explanation', text: explanation })}\n\n`);
+      } catch (e: any) {
+        console.error('[LAO Core] AI explanation error on child error:', e);
+      }
       res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
       res.end();
     });
@@ -472,6 +514,47 @@ app.get('/api/devloop/run', async (req, res) => {
     console.error('DevLoop Execution error:', error);
     res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
     res.end();
+  }
+});
+
+// 16. Get Checklist Tasks
+app.get('/api/tasks', (req, res) => {
+  try {
+    const raw = storage.readTasksRaw();
+    const parsed = storage.readTasksParsed();
+    res.json({ raw, parsed });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 17. Toggle Checklist Task
+app.post('/api/tasks/toggle', (req, res) => {
+  try {
+    const { index, status } = req.body;
+    if (index === undefined || !status) {
+      return res.status(400).json({ error: 'index and status are required' });
+    }
+    storage.updateTaskStatus(Number(index), status);
+    const raw = storage.readTasksRaw();
+    const parsed = storage.readTasksParsed();
+    res.json({ success: true, raw, parsed });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 18. Generate/Re-generate Checklist Tasks
+app.post('/api/tasks/generate', async (req, res) => {
+  try {
+    const config = storage.readConfig();
+    const sections = storage.readSpecs();
+    const generatedTasks = await orchestrator.runTaskSprout(config, sections);
+    storage.writeTasksRaw(generatedTasks);
+    const parsed = storage.readTasksParsed();
+    res.json({ success: true, raw: generatedTasks, parsed });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 

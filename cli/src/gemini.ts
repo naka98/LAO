@@ -148,9 +148,21 @@ export class GeminiClient {
     let schemaFile: string | null = null;
 
     try {
+      // Load RULES.md if it exists in the working directory
+      let finalPrompt = params.prompt;
+      const rulesPath = path.join(process.cwd(), 'RULES.md');
+      if (fs.existsSync(rulesPath)) {
+        try {
+          const rules = fs.readFileSync(rulesPath, 'utf8');
+          finalPrompt += `\n\n## RULES.md (Strict Project Constraints)\n${rules}`;
+        } catch (e) {
+          console.warn('[LAO Core] Failed to read RULES.md', e);
+        }
+      }
+
       // 1. Create temporary file for prompt
       promptFile = path.join(os.tmpdir(), `lao_prompt_${randomUUID()}.txt`);
-      fs.writeFileSync(promptFile, params.prompt, 'utf8');
+      fs.writeFileSync(promptFile, finalPrompt, 'utf8');
 
       // 2. Create temporary file for JSON schema if jsonMode is active
       if (jsonMode && (provider === 'claude' || provider === 'codex')) {

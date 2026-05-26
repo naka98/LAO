@@ -17,9 +17,26 @@ import {
   GitBranch,
   BookOpen,
   ArrowRight,
-  Globe
+  Globe,
+  ListTodo
 } from 'lucide-react';
-import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules } from './types';
+import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules, TaskItem } from './types';
+import { marked } from 'marked';
+import mermaid from 'mermaid';
+
+marked.use({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    code(token) {
+      const { text, lang } = token;
+      if (lang === 'mermaid') {
+        return `<div class="mermaid">${text}</div>`;
+      }
+      return `<pre class="bg-slate-950 p-4 rounded-xl border border-slate-900 font-mono text-xs overflow-x-auto text-slate-350 my-4"><code class="language-${lang || ''}">${text}</code></pre>`;
+    }
+  }
+});
 
 const translations = {
   en: {
@@ -94,6 +111,14 @@ const translations = {
     toastGapCompleted: "Gap Audit completed successfully.",
     toastGapFailed: "Gap Audit failed",
     toastSpecLockedWarning: "Specifications are locked during development phase",
+    tasksTitle: "Implementation Checklist",
+    generateTasksBtn: "Regenerate Checklist",
+    noTasks: "No implementation tasks generated yet.",
+    toastTasksGenerated: "Checklist generated successfully from specification!",
+    toastTaskUpdated: "Task status updated.",
+    previewTab: "Preview",
+    errorExplanationTitle: "AI Debugging Assistant",
+    previewUrlPlaceholder: "Preview URL (e.g. http://localhost:3000)",
   },
   ko: {
     projectNamePlaceholder: "예: 로컬 데이터베이스 웹 UI",
@@ -167,6 +192,14 @@ const translations = {
     toastGapCompleted: "기획 감사가 성공적으로 완료되었습니다.",
     toastGapFailed: "기획 감사 실행에 실패했습니다.",
     toastSpecLockedWarning: "개발 단계 중에는 기획서를 수정할 수 없습니다.",
+    tasksTitle: "구현 태스크 체크리스트",
+    generateTasksBtn: "체크리스트 재생성",
+    noTasks: "생성된 구현 태스크가 없습니다.",
+    toastTasksGenerated: "명세서로부터 구현 태스크를 성공적으로 생성했습니다!",
+    toastTaskUpdated: "태스크 상태가 업데이트되었습니다.",
+    previewTab: "미리보기",
+    errorExplanationTitle: "AI 오류 분석 및 대처 가이드",
+    previewUrlPlaceholder: "미리보기 URL (예: http://localhost:3000)",
   }
 };
 
@@ -186,8 +219,16 @@ export default function App() {
   const [criteriaMarkdown, setCriteriaMarkdown] = useState<string>('');
   const [gapReview, setGapReview] = useState<string>('');
 
+  // Checklist States
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
+
   // UI States
-  const [activeTab, setActiveTab] = useState<'spec' | 'devloop' | 'timeline' | 'gaps'>('spec');
+  const [activeTab, setActiveTab] = useState<'spec' | 'devloop' | 'preview' | 'timeline' | 'gaps'>('spec');
+  const [previewUrl, setPreviewUrl] = useState('http://localhost:3000');
+  const [devLoopExplanation, setDevLoopExplanation] = useState<string | null>(null);
+
+
   const [chatMessage, setChatMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -224,6 +265,32 @@ export default function App() {
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Initialize mermaid on mount
+  useEffect(() => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+    });
+  }, []);
+
+  // Run mermaid rendering after state updates
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      mermaid.run().catch(err => console.warn('Mermaid rendering error:', err));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [sections, activeTab, criteriaMarkdown, gapReview, editingSectionId]);
+
+  // Markdown rendering helper
+  const renderMarkdown = (content: string) => {
+    try {
+      return { __html: String(marked.parse(content || '')) };
+    } catch (e) {
+      return { __html: content || '' };
+    }
+  };
+
   // 1. Initial Load
   useEffect(() => {
     fetchProjectData();
@@ -248,12 +315,13 @@ export default function App() {
         setFormConfig(configData);
         
         if (configData.projectName) {
-          // Fetch specs, decisions, criteria, messages
-          const [resSpecs, resDecs, resCriteria, resMessages] = await Promise.all([
+          // Fetch specs, decisions, criteria, messages, tasks
+          const [resSpecs, resDecs, resCriteria, resMessages, resTasks] = await Promise.all([
             fetch('/api/specs'),
             fetch('/api/decisions'),
             fetch('/api/criteria'),
-            fetch('/api/messages')
+            fetch('/api/messages'),
+            fetch('/api/tasks')
           ]);
 
           if (resSpecs.ok) setSections(await resSpecs.json());
@@ -263,6 +331,10 @@ export default function App() {
             setCriteriaMarkdown(data.markdown);
           }
           if (resMessages.ok) setMessages(await resMessages.json());
+          if (resTasks.ok) {
+            const data = await resTasks.json();
+            setTasks(data.parsed || []);
+          }
 
           // Trigger compilation
           compileSpecs();
@@ -393,9 +465,52 @@ export default function App() {
             : t.toastUnlocked,
           'success'
         );
+        if (data.tasksGenerated) {
+          showToast(t.toastTasksGenerated, 'success');
+        }
+        fetchProjectData();
       }
     } catch (e) {
       showToast('Failed to change phase lock', 'error');
+    }
+  };
+
+  // Toggle checklist task status
+  const handleToggleTask = async (index: number, currentStatus: 'todo' | 'in_progress' | 'done') => {
+    let nextStatus = 'todo';
+    if (currentStatus === 'todo') nextStatus = 'in_progress';
+    else if (currentStatus === 'in_progress') nextStatus = 'done';
+    
+    try {
+      const res = await fetch('/api/tasks/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index, status: nextStatus })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.parsed || []);
+        showToast(t.toastTaskUpdated, 'success');
+      }
+    } catch (e) {
+      showToast('Failed to update task status', 'error');
+    }
+  };
+
+  // Generate / Regenerate checklist tasks manually
+  const handleGenerateTasks = async () => {
+    setIsGeneratingTasks(true);
+    try {
+      const res = await fetch('/api/tasks/generate', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.parsed || []);
+        showToast(t.toastTasksGenerated, 'success');
+      }
+    } catch (e) {
+      showToast('Failed to generate tasks', 'error');
+    } finally {
+      setIsGeneratingTasks(false);
     }
   };
 
@@ -503,6 +618,7 @@ export default function App() {
   // 8. Run DevLoop command
   const runDevCommand = (kind: 'build' | 'launch' | 'verify') => {
     setConsoleLogs([]);
+    setDevLoopExplanation(null);
     setActiveDevCommand(kind);
     setActiveTab('devloop');
 
@@ -518,6 +634,8 @@ export default function App() {
           setConsoleLogs(prev => [...prev, { type: 'stdout', text: data.chunk }]);
         } else if (data.type === 'stderr') {
           setConsoleLogs(prev => [...prev, { type: 'stderr', text: data.chunk }]);
+        } else if (data.type === 'explanation') {
+          setDevLoopExplanation(data.text);
         } else if (data.type === 'exit') {
           setConsoleLogs(prev => [...prev, { type: 'info', text: `\nProcess completed with exit code: ${data.code}` }]);
           eventSource.close();
@@ -798,49 +916,110 @@ export default function App() {
         {/* Left Side: Wizard / Decision Cards deck & Chat */}
         <div className="w-full md:w-2/5 flex-none md:flex-initial border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-visible md:overflow-y-auto min-h-[450px] md:min-h-0">
           {/* 1. Decision Card Section */}
-          <div className="flex-none">
-            <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
-              <GitBranch className="w-4 h-4 text-violet-400" />
-              {t.decisionCardsDeck} ({pendingDecisions.length})
-            </span>
+          {config.phase === 'development' ? (
+            /* Implementation Checklist Panel */
+            <div className="flex-none flex flex-col bg-slate-900/10 border border-slate-900 rounded-2xl p-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="flex items-center justify-between mb-4 border-b border-slate-900 pb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-350 flex items-center gap-1.5">
+                  <ListTodo className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  {t.tasksTitle}
+                </span>
+                
+                <button
+                  type="button"
+                  onClick={handleGenerateTasks}
+                  disabled={isGeneratingTasks}
+                  className="px-2 py-1 bg-slate-950 border border-slate-850 hover:bg-slate-800 rounded-lg text-[9px] text-slate-450 font-bold transition-all disabled:opacity-50"
+                >
+                  {isGeneratingTasks ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : t.generateTasksBtn}
+                </button>
+              </div>
 
-            {pendingDecisions.length > 0 ? (
-              <div className="space-y-4">
-                {pendingDecisions.map(card => (
-                  <div
-                    key={card.id}
-                    className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 relative overflow-hidden transition-all hover:border-slate-700"
-                  >
-                    <div className="absolute top-0 right-0 px-2 py-0.5 bg-violet-600/20 text-violet-400 rounded-bl-lg text-[9px] uppercase font-bold tracking-wider">
-                      {card.section}
+              {tasks.length > 0 ? (
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                  {tasks.map(task => (
+                    <button
+                      key={task.index}
+                      type="button"
+                      onClick={() => handleToggleTask(task.index, task.status)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all text-xs flex items-start gap-2.5 ${
+                        task.status === 'done'
+                          ? 'bg-slate-950/40 border-slate-900/60 text-slate-550 line-through'
+                          : task.status === 'in_progress'
+                          ? 'bg-slate-900/60 border-violet-900/50 text-slate-200 border-l-2 border-l-violet-500 shadow-md shadow-violet-500/5'
+                          : 'bg-slate-950 border-slate-855 hover:bg-slate-900/40 text-slate-300'
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {task.status === 'done' ? (
+                          <div className="w-4 h-4 rounded bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-emerald-400" />
+                          </div>
+                        ) : task.status === 'in_progress' ? (
+                          <div className="w-4 h-4 rounded bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                            <Loader2 className="w-2.5 h-2.5 text-violet-400 animate-spin" />
+                          </div>
+                        ) : (
+                          <div className="w-4 h-4 rounded bg-slate-950 border border-slate-800" />
+                        )}
+                      </div>
+                      <span className="leading-normal">{task.text}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-555 italic">
+                  {t.noTasks}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-none">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                <GitBranch className="w-4 h-4 text-violet-400" />
+                {t.decisionCardsDeck} ({pendingDecisions.length})
+              </span>
+
+              {pendingDecisions.length > 0 ? (
+                <div className="space-y-4">
+                  {pendingDecisions.map(card => (
+                    <div
+                      key={card.id}
+                      className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 relative overflow-hidden transition-all hover:border-slate-700"
+                    >
+                      <div className="absolute top-0 right-0 px-2 py-0.5 bg-violet-600/20 text-violet-400 rounded-bl-lg text-[9px] uppercase font-bold tracking-wider">
+                        {card.section}
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-200 mb-1.5 pr-14">{card.title}</h3>
+                      
+                      {/* Alternatives list */}
+                      <div className="space-y-2 mt-3">
+                        {card.options.map(opt => (
+                          <button
+                            key={opt.name}
+                            type="button"
+                            onClick={() => handleResolveDecision(card.id, opt.name)}
+                            className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900/60 p-3 rounded-xl text-left transition-colors border-l-2 hover:border-l-violet-500"
+                          >
+                            <span className="block text-xs font-bold text-slate-300 flex items-center justify-between">
+                              {opt.name}
+                              <ArrowRight className="w-3 h-3 text-slate-500" />
+                            </span>
+                            <span className="block text-[10px] text-slate-505 mt-1">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <h3 className="text-sm font-bold text-slate-200 mb-1.5 pr-14">{card.title}</h3>
-                    
-                    {/* Alternatives list */}
-                    <div className="space-y-2 mt-3">
-                      {card.options.map(opt => (
-                        <button
-                          key={opt.name}
-                          onClick={() => handleResolveDecision(card.id, opt.name)}
-                          className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900/60 p-3 rounded-xl text-left transition-colors border-l-2 hover:border-l-violet-500"
-                        >
-                          <span className="block text-xs font-bold text-slate-300 flex items-center justify-between">
-                            {opt.name}
-                            <ArrowRight className="w-3 h-3 text-slate-500" />
-                          </span>
-                          <span className="block text-[10px] text-slate-500 mt-1">{opt.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-6 text-center text-xs text-slate-500">
-                {t.allResolved}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-6 text-center text-xs text-slate-500">
+                  {t.allResolved}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 2. Interactive Agent Chat Widget */}
           <div className="flex-1 flex flex-col bg-slate-900/30 border border-slate-900 rounded-2xl overflow-visible md:overflow-hidden min-h-[350px]">
@@ -921,6 +1100,7 @@ export default function App() {
               {[
                 { id: 'spec', label: t.compiledSpecTab, icon: FileText },
                 { id: 'devloop', label: t.devloopConsoleTab, icon: Terminal },
+                { id: 'preview', label: t.previewTab, icon: Globe },
                 { id: 'timeline', label: t.decisionTimelineTab, icon: BookOpen },
                 { id: 'gaps', label: t.gapAuditorTab, icon: AlertTriangle }
               ].map(tab => {
@@ -1011,11 +1191,10 @@ export default function App() {
                     ) : (
                       <div
                         onDoubleClick={() => handleStartEditing(section)}
-                        className="text-xs text-slate-400 leading-relaxed font-mono whitespace-pre-wrap select-text cursor-pointer hover:bg-slate-900/10 p-2 rounded-lg"
+                        className="text-xs text-slate-300 leading-relaxed select-text cursor-pointer hover:bg-slate-900/10 p-4 rounded-xl border border-slate-900 bg-slate-950/20 markdown-content"
                         title="Double click to edit spec"
-                      >
-                        {section.content || t.noContent}
-                      </div>
+                        dangerouslySetInnerHTML={renderMarkdown(section.content || t.noContent)}
+                      />
                     )}
                   </div>
                 ))}
@@ -1024,52 +1203,95 @@ export default function App() {
 
             {/* B. DevLoop Console Tab */}
             {activeTab === 'devloop' && (
-              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
-                {/* Console actions */}
-                <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2">
-                  <button
-                    onClick={() => runDevCommand('build')}
-                    disabled={activeDevCommand !== null}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5 text-violet-400" />
-                    {t.runBuildBtn}
-                  </button>
-                  <button
-                    onClick={() => runDevCommand('verify')}
-                    disabled={activeDevCommand !== null}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
-                  >
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    {t.runVerifyBtn}
-                  </button>
-                  <button
-                    onClick={() => runDevCommand('launch')}
-                    disabled={activeDevCommand !== null}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                    {t.launchServerBtn}
-                  </button>
-                </div>
+              <div className="space-y-4 max-w-4xl mx-auto h-full flex flex-col">
+                {/* AI Error Explanation Alert Card */}
+                {devLoopExplanation && (
+                  <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-5 relative overflow-hidden shadow-lg shrink-0">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl pointer-events-none" />
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-red-900/20">
+                      <AlertCircle className="w-5 h-5 text-red-400 animate-pulse" />
+                      <span className="text-sm font-bold text-red-200">{t.errorExplanationTitle}</span>
+                    </div>
+                    <div
+                      className="text-xs text-red-350 leading-relaxed select-text markdown-content max-h-[200px] overflow-y-auto"
+                      dangerouslySetInnerHTML={renderMarkdown(devLoopExplanation)}
+                    />
+                  </div>
+                )}
 
-                {/* Logs Screen */}
-                <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text">
-                  {consoleLogs.length === 0 ? (
-                    <div className="text-slate-700 italic">{t.consoleIdle}</div>
-                  ) : (
-                    consoleLogs.map((log, idx) => (
-                      <div
-                        key={idx}
-                        className={`whitespace-pre-wrap ${
-                          log.type === 'stderr' ? 'text-red-400' : log.type === 'info' ? 'text-violet-400 font-bold' : 'text-slate-300'
-                        }`}
-                      >
-                        {log.text}
-                      </div>
-                    ))
-                  )}
-                  <div ref={logsEndRef} />
+                <div className="h-[450px] md:h-full flex-1 flex flex-col border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
+                  {/* Console actions */}
+                  <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2">
+                    <button
+                      onClick={() => runDevCommand('build')}
+                      disabled={activeDevCommand !== null}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5 text-violet-400" />
+                      {t.runBuildBtn}
+                    </button>
+                    <button
+                      onClick={() => runDevCommand('verify')}
+                      disabled={activeDevCommand !== null}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      {t.runVerifyBtn}
+                    </button>
+                    <button
+                      onClick={() => runDevCommand('launch')}
+                      disabled={activeDevCommand !== null}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                      {t.launchServerBtn}
+                    </button>
+                  </div>
+
+                  {/* Logs Screen */}
+                  <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text">
+                    {consoleLogs.length === 0 ? (
+                      <div className="text-slate-700 italic">{t.consoleIdle}</div>
+                    ) : (
+                      consoleLogs.map((log, idx) => (
+                        <div
+                          key={idx}
+                          className={`whitespace-pre-wrap ${
+                            log.type === 'stderr' ? 'text-red-400' : log.type === 'info' ? 'text-violet-400 font-bold' : 'text-slate-300'
+                          }`}
+                        >
+                          {log.text}
+                        </div>
+                      ))
+                    )}
+                    <div ref={logsEndRef} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* E. Live App Preview Tab */}
+            {activeTab === 'preview' && (
+              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
+                {/* URL Bar */}
+                <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2 items-center">
+                  <Globe className="w-4 h-4 text-violet-400 shrink-0" />
+                  <input
+                    type="text"
+                    value={previewUrl}
+                    onChange={e => setPreviewUrl(e.target.value)}
+                    placeholder={t.previewUrlPlaceholder}
+                    className="flex-1 bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500 font-mono"
+                  />
+                </div>
+                {/* Webpage Viewer Frame */}
+                <div className="flex-1 bg-white relative min-h-[400px]">
+                  <iframe
+                    src={previewUrl}
+                    title="App Preview"
+                    className="w-full h-full border-none bg-white"
+                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                  />
                 </div>
               </div>
             )}
@@ -1078,9 +1300,10 @@ export default function App() {
             {activeTab === 'timeline' && (
               <div className="max-w-2xl mx-auto">
                 {criteriaMarkdown ? (
-                  <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 font-mono text-xs text-slate-400 leading-relaxed select-text whitespace-pre-wrap">
-                    {criteriaMarkdown}
-                  </div>
+                  <div 
+                    className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 text-xs text-slate-350 leading-relaxed select-text markdown-content"
+                    dangerouslySetInnerHTML={renderMarkdown(criteriaMarkdown)}
+                  />
                 ) : (
                   <div className="text-center text-slate-650 py-10">{t.noDecisionLogs}</div>
                 )}
@@ -1098,9 +1321,10 @@ export default function App() {
                   </div>
 
                   {gapReview ? (
-                    <div className="font-mono text-xs text-slate-400 leading-relaxed whitespace-pre-wrap select-text">
-                      {gapReview}
-                    </div>
+                    <div 
+                      className="text-xs text-slate-350 leading-relaxed select-text markdown-content"
+                      dangerouslySetInnerHTML={renderMarkdown(gapReview)}
+                    />
                   ) : (
                     <div className="text-xs text-slate-600 italic">
                       {t.gapReportDesc}

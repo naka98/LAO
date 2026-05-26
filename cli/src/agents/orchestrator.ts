@@ -260,4 +260,23 @@ export class AgentOrchestrator {
       specUpdate
     };
   }
+
+  /**
+   * Sprout checklist tasks (task.md) from specs
+   */
+  public async runTaskSprout(config: ProjectConfig, sections: SpecSection[]): Promise<string> {
+    const specsBlock = sections.map(s => `### ${s.title}\n${s.content}`).join('\n\n');
+    const prompt = PromptBuilder.buildTaskSproutPrompt({
+      projectName: config.projectName,
+      projectDesc: config.projectDesc,
+      specsBlock
+    });
+
+    const responseRaw = await this.geminiClient.generateText({
+      prompt,
+      role: 'specifier'
+    });
+
+    return responseRaw.trim();
+  }
 }
