@@ -107,6 +107,13 @@ When installed globally, you can run the `lao` command in any directory on your 
   yarn global add https://github.com/naka98/LAO.git
   ```
 
+**How to run**:
+Simply run the `lao` command in the directory where you want to create or manage your `.lao` workspace:
+```bash
+cd /path/to/your/project
+lao
+```
+
 #### 2. Installing as a Dependency
 You can add LAO as a dependency in another package to integrate its CLI core.
 
@@ -119,6 +126,16 @@ You can add LAO as a dependency in another package to integrate its CLI core.
   yarn add https://github.com/naka98/LAO.git
   ```
   *(Note: The build pipeline will automatically compile both the CLI and Web UI assets inside your node_modules.)*
+
+**How to run**:
+Invoke the local dependency binary using `npx` or `yarn`:
+```bash
+# Using npm
+npx lao
+
+# Using Yarn
+yarn lao
+```
 
 ---
 
