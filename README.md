@@ -59,10 +59,12 @@ LAO/
 ### Prerequisites
 * **Node.js** v18.0.0 or higher
 * **npm** v9.0.0 or higher
+* **Yarn** (optional) - if using Yarn for package management
 * Local AI CLI clients installed and authenticated:
-  * **Gemini CLI**: `gemini`
+  * **Gemini CLI**: `gemini` (default)
   * **Claude CLI**: `claude` (Claude Engineer)
   * **Codex CLI**: `codex`
+  * **Antigravity CLI**: `agy` (optional)
 
 ### Setup & Launch
 

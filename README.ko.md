@@ -59,10 +59,12 @@ LAO/
 ### 필수 조건
 * **Node.js** v18.0.0 이상
 * **npm** v9.0.0 이상
+* **Yarn** (선택) - Yarn 패키지 매니저를 사용하는 경우
 * 로컬 머신에 로그인 및 설정된 AI CLI 도구:
-  * **Gemini CLI**: `gemini`
+  * **Gemini CLI**: `gemini` (기본값)
   * **Claude CLI**: `claude` (Claude Engineer)
   * **Codex CLI**: `codex`
+  * **Antigravity CLI**: `agy` (선택)
 
 ### 설치 및 구동 방법
 
