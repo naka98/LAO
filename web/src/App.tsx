@@ -16,11 +16,168 @@ import {
   Sparkles,
   GitBranch,
   BookOpen,
-  ArrowRight
+  ArrowRight,
+  Globe
 } from 'lucide-react';
 import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules } from './types';
 
+const translations = {
+  en: {
+    projectNamePlaceholder: "e.g. Local Database WebUI",
+    roughIdeaPlaceholder: "Type your rough idea here... e.g. A lightweight web-based console to view and query local SQLite files with schema diagrams.",
+    launchProject: "Launch New Project",
+    launchDesc: "Transform a rough seed idea into compiled specs & code",
+    projectNameLabel: "Project Name",
+    roughIdeaLabel: "Rough Seed Idea",
+    goldenRulesTitle: "Golden Rules Presets (Technology Guardrails)",
+    frontendLabel: "Frontend",
+    backendLabel: "Backend",
+    databaseLabel: "Database",
+    additionalLabel: "Constraints",
+    automationLevelLabel: "Automation Level",
+    supervisedLabel: "Supervised (High)",
+    supervisedDesc: "Wait for approvals (Default)",
+    interactiveLabel: "Interactive (Medium)",
+    interactiveDesc: "Proceed and notify",
+    autopilotLabel: "Autopilot (Low)",
+    autopilotDesc: "Full hands-off build",
+    sproutSpecsBtn: "Sprout Core Specifications",
+    loadingSpecs: "Orchestrating AI Agents...",
+    loadingSpecsDesc: "Specifier is drafting core specs, Optionizer is spawning decision forks, and Gap Detector is scanning the initial files. Please wait.",
+    startDevelopment: "Start Development",
+    lockSpecCTA: "Lock Spec",
+    unlockPlanning: "Unlock Planning",
+    planningPhase: "PLANNING (EDITABLE)",
+    developmentPhase: "DEVELOPMENT (LOCKED)",
+    decisionCardsDeck: "Decision Cards Deck",
+    allResolved: "All option forks resolved! The design aligns with the Golden Rules.",
+    officeAgentChat: "Office Agent Chat",
+    directorRouting: "Director routing...",
+    responding: "responding...",
+    chatLocked: "Chat locked in development phase",
+    chatPlaceholder: "Ask Specifier / Researcher / Gap Detector...",
+    compiledSpecTab: "Compiled Spec",
+    devloopConsoleTab: "DevLoop Console",
+    decisionTimelineTab: "Decision Timeline",
+    gapAuditorTab: "Gap Auditor Logs",
+    runGapAudit: "Run Gap Audit",
+    doubleClickToEdit: "Double-click content to edit",
+    cancelBtn: "Cancel",
+    saveSpecBtn: "Save Spec Section",
+    noContent: "*(No details specified yet)*",
+    runBuildBtn: "Run Build",
+    runVerifyBtn: "Run Verify (Tests)",
+    launchServerBtn: "Launch Server",
+    consoleIdle: "Console idle. Trigger a DevLoop build or verification command...",
+    noDecisionLogs: "No decision logs found. Resolve a Decision Card to log criteria.",
+    gapReportTitle: "Specification Gap Report",
+    gapReportDesc: "Click the \"Run Gap Audit\" button at the top right to verify all specifications against architectural guardrails.",
+    projectConfigTitle: "Project Configuration",
+    globalPresetsTab: "Global Presets",
+    agentConfigTab: "Agent Customization",
+    devloopCommandsTab: "DevLoop Commands",
+    globalProviderLabel: "Global AI Provider",
+    modelOverrideLabel: "Model Override (Optional)",
+    agentRoleLabel: "Agent",
+    defaultModelPlaceholder: "default model",
+    buildCommandLabel: "Build Command",
+    verifyCommandLabel: "Verify (Test) Command",
+    launchCommandLabel: "Launch Command",
+    closeBtn: "Close",
+    saveConfigBtn: "Save Config",
+    toastErrorLoading: "Error loading project workspace",
+    toastSprouted: "Specs sprouted successfully conforming to Golden Rules!",
+    toastDecisionResolved: "Decision resolved: ",
+    toastSectionUpdated: "Section updated successfully",
+    toastLocked: "Specifications LOCKED. Development phase active!",
+    toastUnlocked: "Specifications UNLOCKED. Planning phase active.",
+    toastGapCompleted: "Gap Audit completed successfully.",
+    toastGapFailed: "Gap Audit failed",
+    toastSpecLockedWarning: "Specifications are locked during development phase",
+  },
+  ko: {
+    projectNamePlaceholder: "예: 로컬 데이터베이스 웹 UI",
+    roughIdeaPlaceholder: "머릿속의 대략적인 아이디어를 자유롭게 적어보세요... 예: SQLite 파일을 로컬에서 열어서 쿼리를 수행하고 스키마 다이어그램을 그려주는 가벼운 웹 도구.",
+    launchProject: "새 프로젝트 시작하기",
+    launchDesc: "러프한 아이디어 시드에서 정제된 기획 문서 및 코드로 변환합니다",
+    projectNameLabel: "프로젝트 이름",
+    roughIdeaLabel: "대략적인 아이디어",
+    goldenRulesTitle: "골든 룰 프리셋 (기술 스택 제약 조건)",
+    frontendLabel: "프론트엔드",
+    backendLabel: "백엔드",
+    databaseLabel: "데이터베이스",
+    additionalLabel: "기타 제약사항",
+    automationLevelLabel: "자동화 단계",
+    supervisedLabel: "승인 대기 (상)",
+    supervisedDesc: "결정 사항 승인 대기 (기본값)",
+    interactiveLabel: "알림 후 진행 (중)",
+    interactiveDesc: "설계 진행 후 변경 알림",
+    autopilotLabel: "완전 자동 (하)",
+    autopilotDesc: "개입 없는 자율 설계 진행",
+    sproutSpecsBtn: "핵심 명세 자동 생성 시작",
+    loadingSpecs: "AI 에이전트단 오케스트레이션 중...",
+    loadingSpecsDesc: "기획 에이전트가 초안을 작성하고, 대안 분석 에이전트가 선택지를 분기하고, 모순 감지 에이전트가 설계를 검토하고 있습니다. 잠시만 기다려 주세요.",
+    startDevelopment: "개발 단계 전환",
+    lockSpecCTA: "기획 잠금",
+    unlockPlanning: "기획 수정 (잠금 해제)",
+    planningPhase: "기획 설계 단계 (수정 가능)",
+    developmentPhase: "개발 진행 단계 (기획 잠금)",
+    decisionCardsDeck: "의사결정 카드 덱",
+    allResolved: "모든 설계 옵션이 결정되었습니다! 골든 룰에 부합합니다.",
+    officeAgentChat: "오피스 에이전트 대화방",
+    directorRouting: "디렉터 에이전트 라우팅 중...",
+    responding: "답변 중...",
+    chatLocked: "개발 단계에서는 대화방이 잠깁니다",
+    chatPlaceholder: "기획자 / 리서처 / 갭 디텍터에게 질문하기...",
+    compiledSpecTab: "통합 사양서",
+    devloopConsoleTab: "개발 루프 콘솔",
+    decisionTimelineTab: "의사결정 타임라인",
+    gapAuditorTab: "기획 누락 감사로그",
+    runGapAudit: "기획 모순 감사 실행",
+    doubleClickToEdit: "더블클릭하여 명세서 수정하기",
+    cancelBtn: "취소",
+    saveSpecBtn: "명세 섹션 저장",
+    noContent: "*(아직 상세 사양이 정의되지 않았습니다)*",
+    runBuildBtn: "빌드 명령어 실행",
+    runVerifyBtn: "테스트 검증 실행",
+    launchServerBtn: "로컬 서버 기동",
+    consoleIdle: "콘솔이 유휴 상태입니다. 빌드 또는 테스트 검증 명령어를 실행하세요...",
+    noDecisionLogs: "기록된 의사결정 이력이 없습니다. 의사결정 카드를 해결해 보세요.",
+    gapReportTitle: "기획 정밀 감사 리포트",
+    gapReportDesc: "우측 상단의 '기획 모순 감사 실행' 버튼을 클릭하여 기획서에 누락이나 골든 룰 위반이 없는지 확인하세요.",
+    projectConfigTitle: "프로젝트 환경 설정",
+    globalPresetsTab: "글로벌 프리셋",
+    agentConfigTab: "에이전트 역할 설정",
+    devloopCommandsTab: "개발 명령어",
+    globalProviderLabel: "글로벌 AI 프로바이더",
+    modelOverrideLabel: "모델명 수동 지정 (선택)",
+    agentRoleLabel: "에이전트 역할",
+    defaultModelPlaceholder: "기본 모델 사용",
+    buildCommandLabel: "빌드 명령어",
+    verifyCommandLabel: "테스트 검증 명령어",
+    launchCommandLabel: "서버 기동 명령어",
+    closeBtn: "닫기",
+    saveConfigBtn: "설정 저장",
+    toastErrorLoading: "프로젝트 작업 공간을 로드하는 데 실패했습니다.",
+    toastSprouted: "골든 룰에 부합하는 사양 초안이 생성되었습니다!",
+    toastDecisionResolved: "의사결정이 반영되었습니다: ",
+    toastSectionUpdated: "명세 섹션이 성공적으로 저장되었습니다.",
+    toastLocked: "기획서가 잠겼습니다. 이제 개발 단계를 시작합니다!",
+    toastUnlocked: "기획서 잠금이 해제되었습니다. 기획 설정을 수정할 수 있습니다.",
+    toastGapCompleted: "기획 감사가 성공적으로 완료되었습니다.",
+    toastGapFailed: "기획 감사 실행에 실패했습니다.",
+    toastSpecLockedWarning: "개발 단계 중에는 기획서를 수정할 수 없습니다.",
+  }
+};
+
 export default function App() {
+  // Localization state
+  const [lang, setLang] = useState<'ko' | 'en'>(() => {
+    const browserLang = navigator.language.substring(0, 2);
+    return browserLang === 'ko' ? 'ko' : 'en';
+  });
+  const t = translations[lang];
+
   // App Core States
   const [config, setConfig] = useState<ProjectConfig | null>(null);
   const [sections, setSections] = useState<SpecSection[]>([]);
@@ -112,7 +269,7 @@ export default function App() {
         }
       }
     } catch (e) {
-      showToast('Error loading project workspace', 'error');
+      showToast(t.toastErrorLoading, 'error');
     }
   };
 
@@ -157,7 +314,7 @@ export default function App() {
       setMessages([]);
       setCriteriaMarkdown('');
       compileSpecs();
-      showToast('Specs sprouted successfully conforming to Golden Rules!', 'success');
+      showToast(t.toastSprouted, 'success');
     } catch (e: any) {
       showToast(`Initialization failed: ${e.message}`, 'error');
     } finally {
@@ -174,7 +331,7 @@ export default function App() {
         body: JSON.stringify({ cardId, approvedOptionName: optionName, reason })
       });
       if (res.ok) {
-        showToast(`Decision resolved: ${optionName}`, 'success');
+        showToast(`${t.toastDecisionResolved}${optionName}`, 'success');
         fetchProjectData();
       }
     } catch (e) {
@@ -185,7 +342,7 @@ export default function App() {
   // 4. Edit Spec Section
   const handleStartEditing = (section: SpecSection) => {
     if (config?.phase === 'development') {
-      return showToast('Specifications are locked during development phase', 'warning');
+      return showToast(t.toastSpecLockedWarning, 'warning');
     }
     setEditingSectionId(section.id);
     setEditingContent(section.content);
@@ -207,7 +364,7 @@ export default function App() {
         })
       });
       if (res.ok) {
-        showToast('Section updated successfully', 'success');
+        showToast(t.toastSectionUpdated, 'success');
         setEditingSectionId(null);
         fetchProjectData();
       }
@@ -232,8 +389,8 @@ export default function App() {
         setFormConfig(data.config);
         showToast(
           nextPhase === 'development'
-            ? 'Specifications LOCKED. Development phase active!'
-            : 'Specifications UNLOCKED. Planning phase active.',
+            ? t.toastLocked
+            : t.toastUnlocked,
           'success'
         );
       }
@@ -251,10 +408,10 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setGapReview(data.review);
-        showToast('Gap Audit completed successfully.', 'success');
+        showToast(t.toastGapCompleted, 'success');
       }
     } catch (e) {
-      showToast('Gap Audit failed', 'error');
+      showToast(t.toastGapFailed, 'error');
     } finally {
       setIsAuditing(false);
     }
@@ -408,10 +565,8 @@ export default function App() {
         <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-emerald-500/10 animate-pulse pointer-events-none" />
           <Loader2 className="w-12 h-12 text-violet-500 animate-spin mx-auto mb-6" />
-          <h2 className="text-xl font-bold text-slate-200 mb-2">Orchestrating AI Agents...</h2>
-          <p className="text-sm text-slate-400">
-            Specifier is drafting core specs, Optionizer is spawning decision forks, and Gap Detector is scanning the initial files. Please wait.
-          </p>
+          <h2 className="text-xl font-bold text-slate-200 mb-2">{t.loadingSpecs}</h2>
+          <p className="text-sm text-slate-400">{t.loadingSpecsDesc}</p>
         </div>
       </div>
     );
@@ -421,6 +576,16 @@ export default function App() {
   if (!config || !config.projectName) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        {/* Language switcher on top right */}
+        <div className="absolute top-4 right-4 z-10 flex gap-2">
+          <button
+            onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-350 transition-colors"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            {lang === 'ko' ? 'English' : '한국어'}
+          </button>
+        </div>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
         
         <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden">
@@ -433,18 +598,18 @@ export default function App() {
               <Brain className="w-8 h-8 text-violet-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-100 tracking-tight">Launch New Project</h1>
-              <p className="text-sm text-slate-400">Transform a rough seed idea into compiled specs & code</p>
+              <h1 className="text-2xl font-black text-slate-100 tracking-tight">{t.launchProject}</h1>
+              <p className="text-sm text-slate-400">{t.launchDesc}</p>
             </div>
           </div>
 
           <div className="space-y-5">
             {/* Project Name */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Project Name</label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.projectNameLabel}</label>
               <input
                 type="text"
-                placeholder="e.g. Local Database WebUI"
+                placeholder={t.projectNamePlaceholder}
                 value={intakeProjectName}
                 onChange={e => setIntakeProjectName(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
@@ -454,9 +619,9 @@ export default function App() {
 
             {/* Rough Idea */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Rough Seed Idea</label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.roughIdeaLabel}</label>
               <textarea
-                placeholder="Type your rough idea here... e.g. A lightweight web-based console to view and query local SQLite files with schema diagrams."
+                placeholder={t.roughIdeaPlaceholder}
                 value={intakeDesc}
                 onChange={e => setIntakeDesc(e.target.value)}
                 rows={4}
@@ -469,11 +634,11 @@ export default function App() {
             <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
               <span className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                Golden Rules Presets (Technology Guardrails)
+                {t.goldenRulesTitle}
               </span>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Frontend</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.frontendLabel}</label>
                   <input
                     type="text"
                     value={intakeGoldenRules.frontend}
@@ -482,7 +647,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Backend</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.backendLabel}</label>
                   <input
                     type="text"
                     value={intakeGoldenRules.backend}
@@ -491,7 +656,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Database</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.databaseLabel}</label>
                   <input
                     type="text"
                     value={intakeGoldenRules.database}
@@ -500,7 +665,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Constraints</label>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.additionalLabel}</label>
                   <input
                     type="text"
                     value={intakeGoldenRules.additional}
@@ -513,12 +678,12 @@ export default function App() {
 
             {/* Automation Level Selection */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Automation Level</label>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.automationLevelLabel}</label>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { value: 'supervised', label: 'Supervised (상)', desc: 'Wait for approvals (Default)' },
-                  { value: 'interactive', label: 'Interactive (중)', desc: 'Proceed and notify' },
-                  { value: 'autopilot', label: 'Autopilot (하)', desc: 'Full hands-off build' }
+                  { value: 'supervised', label: t.supervisedLabel, desc: t.supervisedDesc },
+                  { value: 'interactive', label: t.interactiveLabel, desc: t.interactiveDesc },
+                  { value: 'autopilot', label: t.autopilotLabel, desc: t.autopilotDesc }
                 ].map(opt => (
                   <button
                     key={opt.value}
@@ -545,7 +710,7 @@ export default function App() {
             className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 px-6 rounded-xl mt-6 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
           >
             <Sparkles className="w-4 h-4 animate-pulse" />
-            Sprout Core Specifications
+            {t.sproutSpecsBtn}
           </button>
         </form>
 
@@ -581,6 +746,16 @@ export default function App() {
 
         {/* Phase / Lock Gate & Controls */}
         <div className="flex items-center gap-4">
+          
+          {/* Dynamic Language Switcher */}
+          <button
+            onClick={() => setLang(l => l === 'ko' ? 'en' : 'ko')}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-350 transition-colors"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            {lang === 'ko' ? 'EN' : 'KO'}
+          </button>
+
           {/* Phase Badge */}
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold ${
             config.phase === 'development'
@@ -588,7 +763,7 @@ export default function App() {
               : 'bg-amber-500/10 border-amber-500/20 text-amber-400'
           }`}>
             {config.phase === 'development' ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-            {config.phase === 'development' ? 'DEVELOPMENT (LOCKED)' : 'PLANNING (EDITABLE)'}
+            {config.phase === 'development' ? t.developmentPhase : t.planningPhase}
           </div>
 
           {/* Start Dev Transition CTA */}
@@ -600,7 +775,7 @@ export default function App() {
                 : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/10'
             }`}
           >
-            {config.phase === 'development' ? 'Unlock Planning' : 'Start Development (Lock Spec)'}
+            {config.phase === 'development' ? t.unlockPlanning : `${t.startDevelopment} (${t.lockSpecCTA})`}
           </button>
 
           {/* Settings trigger */}
@@ -616,13 +791,13 @@ export default function App() {
 
       {/* Main split-screen panel */}
       <main className="flex-1 flex overflow-hidden">
-        {/* Left Side: Wizard Wizard / Decision Cards deck & Chat */}
+        {/* Left Side: Wizard / Decision Cards deck & Chat */}
         <div className="w-2/5 border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-auto">
           {/* 1. Decision Card Section */}
           <div className="flex-none">
             <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
               <GitBranch className="w-4 h-4 text-violet-400" />
-              Decision Cards Deck ({pendingDecisions.length})
+              {t.decisionCardsDeck} ({pendingDecisions.length})
             </span>
 
             {pendingDecisions.length > 0 ? (
@@ -658,7 +833,7 @@ export default function App() {
               </div>
             ) : (
               <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-6 text-center text-xs text-slate-500">
-                All option forks resolved! The design aligns with the Golden Rules.
+                {t.allResolved}
               </div>
             )}
           </div>
@@ -669,18 +844,18 @@ export default function App() {
             <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Brain className="w-3.5 h-3.5 text-violet-400" />
-                Office Agent Chat
+                {t.officeAgentChat}
               </span>
 
               {/* Streaming routing chip */}
               {routingStatus.isRouting && (
                 <div className="text-[10px] text-violet-400 animate-pulse bg-violet-950/20 border border-violet-850 px-2 py-0.5 rounded-full">
-                  Director routing...
+                  {t.directorRouting}
                 </div>
               )}
               {routingStatus.route && (
                 <div className="text-[10px] text-emerald-400 bg-emerald-950/20 border border-emerald-850 px-2 py-0.5 rounded-full capitalize">
-                  {routingStatus.route} responding...
+                  {routingStatus.route} {t.responding}
                 </div>
               )}
             </div>
@@ -719,7 +894,7 @@ export default function App() {
                 type="text"
                 value={chatMessage}
                 onChange={e => setChatMessage(e.target.value)}
-                placeholder={config.phase === 'development' ? 'Chat locked in development phase' : 'Ask Specifier / Researcher / Gap Detector...'}
+                placeholder={config.phase === 'development' ? t.chatLocked : t.chatPlaceholder}
                 className="flex-1 bg-slate-950 border border-slate-850 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-violet-500 placeholder-slate-600"
                 disabled={isSending || config.phase === 'development'}
               />
@@ -740,10 +915,10 @@ export default function App() {
           <div className="bg-slate-950/40 border-b border-slate-900 px-6 py-2 flex items-center justify-between">
             <div className="flex gap-4">
               {[
-                { id: 'spec', label: 'Compiled Spec', icon: FileText },
-                { id: 'devloop', label: 'DevLoop Console', icon: Terminal },
-                { id: 'timeline', label: 'Decision Timeline', icon: BookOpen },
-                { id: 'gaps', label: 'Gap Auditor Logs', icon: AlertTriangle }
+                { id: 'spec', label: t.compiledSpecTab, icon: FileText },
+                { id: 'devloop', label: t.devloopConsoleTab, icon: Terminal },
+                { id: 'timeline', label: t.decisionTimelineTab, icon: BookOpen },
+                { id: 'gaps', label: t.gapAuditorTab, icon: AlertTriangle }
               ].map(tab => {
                 const Icon = tab.icon;
                 return (
@@ -770,7 +945,7 @@ export default function App() {
               className="flex items-center gap-1 px-3 py-1 bg-slate-900 border border-slate-850 hover:bg-slate-800 rounded-lg text-[10px] text-slate-400 font-bold transition-all disabled:opacity-50"
             >
               {isAuditing ? <Loader2 className="w-3 h-3 animate-spin" /> : <AlertCircle className="w-3 h-3 text-amber-500" />}
-              Run Gap Audit
+              {t.runGapAudit}
             </button>
           </div>
 
@@ -799,7 +974,7 @@ export default function App() {
                       
                       {/* Double click instruction */}
                       <span className="text-[10px] text-slate-600 select-none group-hover:block hidden">
-                        Double-click content to edit
+                        {t.doubleClickToEdit}
                       </span>
                     </div>
 
@@ -817,13 +992,13 @@ export default function App() {
                             onClick={() => setEditingSectionId(null)}
                             className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-slate-400 font-bold"
                           >
-                            Cancel
+                            {t.cancelBtn}
                           </button>
                           <button
                             onClick={() => handleSaveEdit(section.id)}
                             className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg font-bold"
                           >
-                            Save Spec Section
+                            {t.saveSpecBtn}
                           </button>
                         </div>
                       </div>
@@ -833,7 +1008,7 @@ export default function App() {
                         className="text-xs text-slate-400 leading-relaxed font-mono whitespace-pre-wrap select-text cursor-pointer hover:bg-slate-900/10 p-2 rounded-lg"
                         title="Double click to edit spec"
                       >
-                        {section.content || '*(No details specified yet)*'}
+                        {section.content || t.noContent}
                       </div>
                     )}
                   </div>
@@ -852,7 +1027,7 @@ export default function App() {
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
                   >
                     <Play className="w-3.5 h-3.5 text-violet-400" />
-                    Run Build
+                    {t.runBuildBtn}
                   </button>
                   <button
                     onClick={() => runDevCommand('verify')}
@@ -860,7 +1035,7 @@ export default function App() {
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
                   >
                     <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    Run Verify (Tests)
+                    {t.runVerifyBtn}
                   </button>
                   <button
                     onClick={() => runDevCommand('launch')}
@@ -868,14 +1043,14 @@ export default function App() {
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
                   >
                     <Play className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                    Launch Server
+                    {t.launchServerBtn}
                   </button>
                 </div>
 
                 {/* Logs Screen */}
                 <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text min-h-[300px]">
                   {consoleLogs.length === 0 ? (
-                    <div className="text-slate-700 italic">Console idle. Trigger a DevLoop build or verification command...</div>
+                    <div className="text-slate-700 italic">{t.consoleIdle}</div>
                   ) : (
                     consoleLogs.map((log, idx) => (
                       <div
@@ -901,7 +1076,7 @@ export default function App() {
                     {criteriaMarkdown}
                   </div>
                 ) : (
-                  <div className="text-center text-slate-650 py-10">No decision logs found. Resolve a Decision Card to log criteria.</div>
+                  <div className="text-center text-slate-650 py-10">{t.noDecisionLogs}</div>
                 )}
               </div>
             )}
@@ -913,7 +1088,7 @@ export default function App() {
                   <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
                   <div className="flex items-center gap-2 mb-4">
                     <AlertTriangle className="w-5 h-5 text-amber-500" />
-                    <span className="text-sm font-bold text-slate-200">Specification Gap Report</span>
+                    <span className="text-sm font-bold text-slate-200">{t.gapReportTitle}</span>
                   </div>
 
                   {gapReview ? (
@@ -922,7 +1097,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="text-xs text-slate-600 italic">
-                      Click the "Run Gap Audit" button at the top right to verify all specifications against architectural guardrails.
+                      {t.gapReportDesc}
                     </div>
                   )}
                 </div>
@@ -940,7 +1115,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setShowSettings(false)}
-              className="absolute top-4 right-4 p-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200"
+              className="absolute top-4 right-4 p-1.5 bg-slate-950 border border-slate-855 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200"
             >
               <X className="w-4 h-4" />
             </button>
@@ -948,15 +1123,15 @@ export default function App() {
             {/* Modal Heading */}
             <div className="flex items-center gap-2.5 mb-5">
               <Settings className="w-5 h-5 text-violet-400" />
-              <h2 className="text-base font-bold text-slate-100">Project Configuration</h2>
+              <h2 className="text-base font-bold text-slate-100">{t.projectConfigTitle}</h2>
             </div>
 
             {/* Tab selection */}
             <div className="flex gap-2 border-b border-slate-850 mb-4 text-xs font-semibold">
               {[
-                { id: 'global', label: 'Global Presets' },
-                { id: 'agents', label: 'Agent Customization' },
-                { id: 'devloop', label: 'DevLoop Commands' }
+                { id: 'global', label: t.globalPresetsTab },
+                { id: 'agents', label: t.agentConfigTab },
+                { id: 'devloop', label: t.devloopCommandsTab }
               ].map(t => (
                 <button
                   key={t.id}
@@ -978,7 +1153,7 @@ export default function App() {
               {settingsTab === 'global' && (
                 <div className="space-y-3.5 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-400 mb-1">Global AI Provider</label>
+                    <label className="block font-semibold text-slate-400 mb-1">{t.globalProviderLabel}</label>
                     <select
                       value={formConfig.settings.provider}
                       onChange={e => setFormConfig(prev => ({
@@ -994,7 +1169,7 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-400 mb-1">Model Override (Optional)</label>
+                    <label className="block font-semibold text-slate-400 mb-1">{t.modelOverrideLabel}</label>
                     <input
                       type="text"
                       value={formConfig.settings.model}
@@ -1008,10 +1183,10 @@ export default function App() {
                   </div>
 
                   <div className="border-t border-slate-850 pt-3">
-                    <label className="block font-semibold text-slate-300 mb-2">Golden Rules Constraints</label>
+                    <label className="block font-semibold text-slate-300 mb-2">{t.goldenRulesTitle}</label>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Frontend</label>
+                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.frontendLabel}</label>
                         <input
                           type="text"
                           value={formConfig.goldenRules.frontend}
@@ -1019,11 +1194,11 @@ export default function App() {
                             ...prev!,
                             goldenRules: { ...prev!.goldenRules, frontend: e.target.value }
                           }))}
-                          className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Backend</label>
+                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.backendLabel}</label>
                         <input
                           type="text"
                           value={formConfig.goldenRules.backend}
@@ -1031,11 +1206,11 @@ export default function App() {
                             ...prev!,
                             goldenRules: { ...prev!.goldenRules, backend: e.target.value }
                           }))}
-                          className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Database</label>
+                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.databaseLabel}</label>
                         <input
                           type="text"
                           value={formConfig.goldenRules.database}
@@ -1043,11 +1218,11 @@ export default function App() {
                             ...prev!,
                             goldenRules: { ...prev!.goldenRules, database: e.target.value }
                           }))}
-                          className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">Constraints</label>
+                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.additionalLabel}</label>
                         <input
                           type="text"
                           value={formConfig.goldenRules.additional}
@@ -1055,7 +1230,7 @@ export default function App() {
                             ...prev!,
                             goldenRules: { ...prev!.goldenRules, additional: e.target.value }
                           }))}
-                          className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
                         />
                       </div>
                     </div>
@@ -1070,7 +1245,7 @@ export default function App() {
                     const typedKey = roleKey as keyof typeof formConfig.settings.agents;
                     return (
                       <div key={roleKey} className="flex items-center justify-between border-b border-slate-850 pb-2.5">
-                        <span className="font-bold text-slate-300 capitalize">{roleKey} Agent</span>
+                        <span className="font-bold text-slate-300 capitalize">{roleKey} {t.agentRoleLabel}</span>
                         <div className="flex gap-2">
                           <select
                             value={formConfig.settings.agents[typedKey].provider}
@@ -1093,7 +1268,7 @@ export default function App() {
                               agents[typedKey] = { ...agents[typedKey], model: e.target.value };
                               return { ...prev!, settings: { ...prev!.settings, agents } };
                             })}
-                            placeholder="default model"
+                            placeholder={t.defaultModelPlaceholder}
                             className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 w-32 placeholder-slate-650"
                           />
                         </div>
@@ -1107,7 +1282,7 @@ export default function App() {
               {settingsTab === 'devloop' && (
                 <div className="space-y-3 text-xs">
                   <div>
-                    <label className="block font-semibold text-slate-400 mb-1">Build Command</label>
+                    <label className="block font-semibold text-slate-400 mb-1">{t.buildCommandLabel}</label>
                     <input
                       type="text"
                       value={formConfig.developerLoop.buildCommand}
@@ -1119,7 +1294,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-400 mb-1">Verify (Test) Command</label>
+                    <label className="block font-semibold text-slate-400 mb-1">{t.verifyCommandLabel}</label>
                     <input
                       type="text"
                       value={formConfig.developerLoop.verifyCommand}
@@ -1131,7 +1306,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-slate-400 mb-1">Launch Command</label>
+                    <label className="block font-semibold text-slate-400 mb-1">{t.launchCommandLabel}</label>
                     <input
                       type="text"
                       value={formConfig.developerLoop.launchCommand}
@@ -1153,13 +1328,13 @@ export default function App() {
                 onClick={() => setShowSettings(false)}
                 className="px-4 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl font-bold text-slate-450"
               >
-                Close
+                {t.closeBtn}
               </button>
               <button
                 type="submit"
                 className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold"
               >
-                Save Config
+                {t.saveConfigBtn}
               </button>
             </div>
           </form>
