@@ -1163,6 +1163,8 @@ export default function App() {
                       className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-violet-500"
                     >
                       <option value="gemini">Gemini CLI</option>
+                      <option value="claude">Claude CLI</option>
+                      <option value="codex">Codex CLI</option>
                       <option value="agy">Antigravity CLI (agy)</option>
                     </select>
                   </div>
@@ -1256,6 +1258,8 @@ export default function App() {
                             className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300"
                           >
                             <option value="gemini">Gemini</option>
+                            <option value="claude">Claude</option>
+                            <option value="codex">Codex</option>
                             <option value="agy">Antigravity (agy)</option>
                           </select>
                           <input
