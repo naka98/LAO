@@ -79,6 +79,18 @@ function getStatusFromCLIError(exitCode: number, stderr: string, stdout: string)
   return `cli_exit_${exitCode}`;
 }
 
+export const activeProcesses = new Map<string, any>();
+
+export function getShellInfo(): { shell: string; args: string[] } {
+  const isWindows = process.platform === 'win32';
+  if (process.platform === 'darwin') {
+    return { shell: '/bin/zsh', args: ['-lc'] };
+  }
+  const shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
+  const args = isWindows ? ['/d', '/s', '/c'] : ['-c'];
+  return { shell, args };
+}
+
 export class GeminiClient {
   private defaultProvider = (process.env.LAO_PROVIDER || 'gemini').toLowerCase();
   private defaultModel = process.env.LAO_MODEL || '';
@@ -97,6 +109,7 @@ export class GeminiClient {
     jsonMode?: boolean;
     model?: string;
     role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
+    nodeId?: string;
     onChunk?: (chunk: string) => void;
   }): Promise<string> {
     let provider = this.defaultProvider;
@@ -130,25 +143,30 @@ export class GeminiClient {
       }
     }
 
-    // 1. Create temporary file for prompt
-    const promptFile = path.join(os.tmpdir(), `lao_prompt_${randomUUID()}.txt`);
-    fs.writeFileSync(promptFile, params.prompt, 'utf8');
-
-    // 2. Create temporary file for JSON schema if jsonMode is active
+    let promptFile: string | null = null;
     let schemaFile: string | null = null;
-    if (jsonMode && (provider === 'claude' || provider === 'codex')) {
-      schemaFile = path.join(os.tmpdir(), `lao_schema_${randomUUID()}.json`);
-      const schema = getJsonSchemaForPrompt(params.prompt);
-      fs.writeFileSync(schemaFile, JSON.stringify(schema, null, 2), 'utf8');
-    }
 
     try {
+      // 1. Create temporary file for prompt
+      promptFile = path.join(os.tmpdir(), `lao_prompt_${randomUUID()}.txt`);
+      fs.writeFileSync(promptFile, params.prompt, 'utf8');
+
+      // 2. Create temporary file for JSON schema if jsonMode is active
+      if (jsonMode && (provider === 'claude' || provider === 'codex')) {
+        schemaFile = path.join(os.tmpdir(), `lao_schema_${randomUUID()}.json`);
+        const schema = getJsonSchemaForPrompt(params.prompt);
+        fs.writeFileSync(schemaFile, JSON.stringify(schema, null, 2), 'utf8');
+      }
+
       // 3. Build command template
       let command = '';
       if (provider === 'claude') {
         let baseCmd = process.env.LAO_PROVIDER_CLAUDE_CLI || 'claude';
         if (!baseCmd.includes('--dangerously-skip-permissions')) {
-          baseCmd = baseCmd.replace('claude', 'claude --dangerously-skip-permissions --allowedTools Bash');
+          baseCmd = baseCmd.replace(/\bclaude\b/, 'claude --dangerously-skip-permissions --allowedTools Bash');
+        }
+        if (model && !baseCmd.includes('--model')) {
+          baseCmd += ` --model "${model}"`;
         }
         if (schemaFile) {
           if (!baseCmd.includes('--json-schema')) {
@@ -168,7 +186,10 @@ export class GeminiClient {
       } else if (provider === 'codex') {
         let baseCmd = process.env.LAO_PROVIDER_CODEX_CLI || 'codex';
         if (!baseCmd.includes('codex exec')) {
-          baseCmd = baseCmd.replace('codex', 'codex exec');
+          baseCmd = baseCmd.replace(/\bcodex\b/, 'codex exec');
+        }
+        if (model && !baseCmd.includes('--model')) {
+          baseCmd += ` --model "${model}"`;
         }
         if (!baseCmd.includes('model_reasoning_effort') && !baseCmd.includes('reasoning.effort')) {
           baseCmd = baseCmd.replace('codex exec', "codex exec -c model_reasoning_effort='high'");
@@ -191,11 +212,29 @@ export class GeminiClient {
         }
         command = baseCmd;
 
+      } else if (provider === 'agy') {
+        let baseCmd = process.env.LAO_PROVIDER_AGY_CLI || 'agy';
+        if (!baseCmd.includes('--dangerously-skip-permissions')) {
+          baseCmd = baseCmd.replace(/\bagy\b/, 'agy --dangerously-skip-permissions');
+        }
+        if (model && !baseCmd.includes('--model')) {
+          baseCmd += ` --model "${model}"`;
+        }
+        if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
+          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
+        } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
+          baseCmd += ' -p "$(cat "$LAO_PROMPT_FILE")"';
+        }
+        command = baseCmd;
+
       } else {
         // default: gemini
         let baseCmd = process.env.LAO_PROVIDER_GEMINI_CLI || 'gemini';
         if (!baseCmd.includes('--yolo') && !baseCmd.includes('--approval-mode') && baseCmd.includes('gemini')) {
-          baseCmd = baseCmd.replace('gemini', 'gemini --yolo --sandbox false');
+          baseCmd = baseCmd.replace(/\bgemini\b/, 'gemini --yolo --sandbox false');
+        }
+        if (model && !baseCmd.includes('--model')) {
+          baseCmd += ` --model "${model}"`;
         }
         const hasPromptArg = baseCmd.includes('--prompt') || baseCmd.includes(' -p ') || baseCmd.includes('$LAO_PROMPT_FILE');
         if (!hasPromptArg && baseCmd.includes('gemini')) {
@@ -236,11 +275,18 @@ export class GeminiClient {
 
       console.log(`[LAO Core] Executing local CLI command: ${command}`);
 
-      // 5. Execute command using zsh interactive/login shell via spawn to support stdout streaming
-      const child = spawn('/bin/zsh', ['-lc', command], {
+      // Get cross-platform shell
+      const { shell, args: shellArgs } = getShellInfo();
+
+      // 5. Execute command using dynamic shell via spawn to support stdout streaming
+      const child = spawn(shell, [...shellArgs, command], {
         cwd: process.cwd(),
         env,
       });
+
+      if (params.nodeId) {
+        activeProcesses.set(params.nodeId, child);
+      }
 
       let stdout = '';
       let stderr = '';
@@ -310,9 +356,12 @@ export class GeminiClient {
       console.error(`[LAO Core] CLI Execution failed. Status: ${status}. Detail: ${diagnosticMsg}`);
       throw new Error(`CLI Request Failed (${status}): ${diagnosticMsg}`);
     } finally {
+      if (params.nodeId) {
+        activeProcesses.delete(params.nodeId);
+      }
       // 7. Cleanup temp files
       try {
-        if (fs.existsSync(promptFile)) {
+        if (promptFile && fs.existsSync(promptFile)) {
           fs.unlinkSync(promptFile);
         }
       } catch (err) {

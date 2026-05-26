@@ -11,6 +11,12 @@
     "build": "npm run build --prefix cli && npm run build --prefix web",
     "start": "node cli/dist/index.js"
   },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
   "keywords": [
     "lao",
     "ai",

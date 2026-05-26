@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { GraphNode, NodeMessage, ParsedProposal, NodeMessageAuthor } from '../types';
-import { Send, User, Brain, AlertCircle, Check, GitMerge } from 'lucide-react';
+import { Send, User, Brain, AlertCircle, Check, GitMerge, Square } from 'lucide-react';
 
 interface NodeDetailPanelProps {
   node: GraphNode;
@@ -18,6 +18,7 @@ interface NodeDetailPanelProps {
   };
   lastProposal?: ParsedProposal;
   onClearProposal: () => void;
+  onCancelGeneration?: () => void;
 }
 
 const getAuthorMeta = (author: NodeMessageAuthor) => {
@@ -49,6 +50,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   routingStatus,
   lastProposal,
   onClearProposal,
+  onCancelGeneration,
 }) => {
   const [inputMsg, setInputMsg] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -87,7 +89,7 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
   const isCandidateNode = node.branchRole === 'candidate';
 
   return (
-    <div className="w-[450px] border-l border-slate-800 bg-slate-900/90 backdrop-blur-md flex flex-col h-full shadow-2xl relative z-10">
+    <div className="w-full flex flex-col h-full relative z-10">
       
       {/* Node Meta Details Header */}
       <div className="p-5 border-b border-slate-800 flex flex-col gap-3">
@@ -156,9 +158,12 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
         {/* Sibling Candidates Merge Action */}
         {!isCandidateNode && candidates.length > 0 && (
           <div className="mt-2 p-3 bg-slate-950/50 border border-slate-800/80 rounded-lg">
-            <span className="text-[10px] font-semibold text-slate-400 block mb-2">
+            <span className="text-[10px] font-semibold text-slate-400 block mb-1">
               🌿 Available Alternative Branches ({candidates.length})
             </span>
+            <p className="text-[9px] text-slate-500 leading-normal mb-2.5">
+              이 노드의 하위 대안들이 캔버스 오른쪽에 생성되었습니다. 원하는 대안을 개별 채택(Adopt)하거나, 여러 대안을 합치려면 병합(Merge)을 누르세요.
+            </p>
             <div className="flex flex-col gap-1.5">
               {candidates.map((c) => (
                 <div key={c.id} className="flex justify-between items-center text-xs bg-slate-900 px-2.5 py-1.5 rounded border border-slate-800">
@@ -187,12 +192,57 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
       {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
         {messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-            <Brain size={32} className="text-slate-600 mb-2 animate-bounce" />
-            <p className="text-xs font-medium">참모들과의 대화가 없습니다.</p>
-            <p className="text-[10px] text-slate-600 mt-1">
-              아래에 기획 질문을 입력하거나 피드백을 주면 AI 디렉터가 적절한 에이전트를 라우팅합니다.
-            </p>
+          <div className="h-full flex flex-col items-center justify-center p-2 text-center text-slate-500 space-y-4">
+            <div className="flex flex-col items-center">
+              <Brain size={32} className="text-slate-600 mb-2 animate-bounce" />
+              <p className="text-xs font-semibold text-slate-400">참모들과의 대화가 없습니다.</p>
+              <p className="text-[9px] text-slate-500 mt-1 max-w-[280px]">
+                기획 질문을 하시면 AI 디렉터가 최적의 참모를 자동 지정하여 실시간으로 답변해 줍니다.
+              </p>
+            </div>
+            
+            <div className="w-full space-y-2.5 mt-2">
+              <span className="text-[9px] font-bold text-violet-400 uppercase tracking-wider block text-left mb-1.5">
+                🚀 빠른 추천 질문 (클릭 시 자동 전송)
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onSendMessage("이 기획의 구체적인 아키텍처와 흐름을 자세히 설계해줘.")}
+                  className="p-2.5 rounded-lg border border-purple-500/10 bg-purple-950/10 hover:bg-purple-950/20 hover:border-purple-500/30 text-left text-[10px] leading-normal transition-all cursor-pointer"
+                >
+                  <span className="font-bold text-purple-300 block mb-0.5">💡 구체화 (Specifier)</span>
+                  <span className="text-[9px] text-slate-500 line-clamp-2">상세 아키텍처 및 세부 컴포넌트 설계 요청</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onSendMessage("이 하위 레벨에서 취할 수 있는 또 다른 대안 3가지를 제안해줘.")}
+                  className="p-2.5 rounded-lg border border-emerald-500/10 bg-emerald-950/10 hover:bg-emerald-950/20 hover:border-emerald-500/30 text-left text-[10px] leading-normal transition-all cursor-pointer"
+                >
+                  <span className="font-bold text-emerald-300 block mb-0.5">🌿 대안 제시 (Optionizer)</span>
+                  <span className="text-[9px] text-slate-500 line-clamp-2">선택 가능한 갈림길(Branch) 3가지 생성</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onSendMessage("이 설계와 관련된 오픈소스 프로젝트나 업계 표준 사례가 있을까?")}
+                  className="p-2.5 rounded-lg border border-sky-500/10 bg-sky-950/10 hover:bg-sky-950/20 hover:border-sky-500/30 text-left text-[10px] leading-normal transition-all cursor-pointer"
+                >
+                  <span className="font-bold text-sky-300 block mb-0.5">🔍 레퍼런스 조사 (Researcher)</span>
+                  <span className="text-[9px] text-slate-500 line-clamp-2">기술 스택 레퍼런스 및 벤치마킹 조사</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onSendMessage("이 흐름에서 발생할 수 있는 취약점이나 엣지 케이스가 있는지 검토해줘.")}
+                  className="p-2.5 rounded-lg border border-rose-500/10 bg-rose-950/10 hover:bg-rose-950/20 hover:border-rose-500/30 text-left text-[10px] leading-normal transition-all cursor-pointer"
+                >
+                  <span className="font-bold text-rose-300 block mb-0.5">⚠️ 공백 점검 (Gap Detector)</span>
+                  <span className="text-[9px] text-slate-500 line-clamp-2">누락된 설계 및 예외적 케이스 검토</span>
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           messages.map((msg) => {
@@ -313,19 +363,30 @@ export const NodeDetailPanel: React.FC<NodeDetailPanelProps> = ({
       <form onSubmit={handleSend} className="p-4 border-t border-slate-800 bg-slate-950 flex gap-2">
         <input
           type="text"
-          placeholder="참모들에게 기획 방향을 지시하거나 질문해보세요..."
+          placeholder={isSending ? "AI 참모가 답변을 작성하고 있습니다..." : "참모들에게 기획 방향을 지시하거나 질문해보세요..."}
           className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-violet-500 placeholder-slate-600"
           value={inputMsg}
           onChange={(e) => setInputMsg(e.target.value)}
           disabled={isSending}
         />
-        <button
-          type="submit"
-          disabled={!inputMsg.trim() || isSending}
-          className="p-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:bg-slate-800 disabled:text-slate-600 transition-colors"
-        >
-          <Send size={14} />
-        </button>
+        {isSending && onCancelGeneration ? (
+          <button
+            type="button"
+            onClick={onCancelGeneration}
+            className="p-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-colors cursor-pointer flex items-center justify-center shrink-0"
+            title="생성 중단"
+          >
+            <Square size={14} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={!inputMsg.trim() || isSending}
+            className="p-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white disabled:bg-slate-800 disabled:text-slate-600 transition-colors flex items-center justify-center shrink-0"
+          >
+            <Send size={14} />
+          </button>
+        )}
       </form>
     </div>
   );

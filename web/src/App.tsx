@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { MindmapCanvas } from './components/MindmapCanvas';
 import { NodeDetailPanel } from './components/NodeDetailPanel';
 import type { GraphNode, GraphEdge, NodeMessage, ParsedProposal } from './types';
-import { Brain, FileText, BookOpen, Check, Plus, Settings } from 'lucide-react';
+import { Brain, FileText, BookOpen, Check, Plus, Settings, AlertCircle, Menu, X, HelpCircle, ShieldCheck } from 'lucide-react';
 
 function App() {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -16,6 +16,13 @@ function App() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [criteriaMarkdown, setCriteriaMarkdown] = useState('');
   const [compileResult, setCompileResult] = useState<{ success: boolean; filePath: string } | null>(null);
+  const [errorToast, setErrorToast] = useState<{ message: string; type: string } | null>(null);
+  const activeEventSourceRef = useRef<EventSource | null>(null);
+
+  // Responsive / Onboarding States
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showHelpModal, setShowHelpModal] = useState(false);
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   
   // Onboarding States
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
@@ -77,6 +84,14 @@ function App() {
     fetchMindmap();
     fetchSettings();
   }, []);
+
+  // Auto-dismiss error toast
+  useEffect(() => {
+    if (errorToast) {
+      const timer = setTimeout(() => setErrorToast(null), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorToast]);
 
   const fetchSettings = async () => {
     try {
@@ -339,6 +354,7 @@ function App() {
     
     const url = `/api/chat/stream?nodeId=${encodeURIComponent(selectedNodeId)}&message=${encodeURIComponent(messageText)}`;
     const eventSource = new EventSource(url);
+    activeEventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
       try {
@@ -368,6 +384,7 @@ function App() {
           );
         } else if (data.type === 'done') {
           eventSource.close();
+          activeEventSourceRef.current = null;
           setNodes(data.mindmap.nodes);
           setEdges(data.mindmap.edges);
           setMessages(data.mindmap.messages);
@@ -377,7 +394,15 @@ function App() {
           setIsSending(false);
         } else if (data.type === 'error') {
           console.error('SSE backend error:', data.error);
+          let userFriendlyMsg = data.error;
+          if (data.error.includes('cli_not_found')) {
+            userFriendlyMsg = '로컬 AI CLI 도구를 찾을 수 없습니다. 설치 상태 및 환경 변수(PATH)를 확인하십시오.';
+          } else if (data.error.includes('auth_failed')) {
+            userFriendlyMsg = '로컬 CLI 도구의 로그인 정보가 올바르지 않거나 유실되었습니다. 터미널에서 로그인을 확인해 주십시오.';
+          }
+          setErrorToast({ message: userFriendlyMsg, type: 'error' });
           eventSource.close();
+          activeEventSourceRef.current = null;
           setRoutingStatus({ isRouting: false });
           setIsSending(false);
           // Remove local message on error
@@ -390,12 +415,40 @@ function App() {
 
     eventSource.onerror = (err) => {
       console.error('EventSource error:', err);
+      setErrorToast({ message: '로컬 서버와의 연결에 실패했거나 대화 처리 중 에러가 발생했습니다.', type: 'error' });
       eventSource.close();
+      activeEventSourceRef.current = null;
       setRoutingStatus({ isRouting: false });
       setIsSending(false);
       // Remove local message on error
       setMessages((prev) => prev.filter(m => m.id !== tempUserMsgId && m.id !== tempAgentMsgId));
     };
+  };
+
+  // 4.5. Cancel Running AI Agent Chat Generation
+  const handleCancelGeneration = async () => {
+    if (!selectedNodeId) return;
+
+    // Close the SSE stream immediately on the frontend
+    if (activeEventSourceRef.current) {
+      activeEventSourceRef.current.close();
+      activeEventSourceRef.current = null;
+    }
+
+    setIsSending(false);
+    setRoutingStatus({ isRouting: false });
+
+    // Tell the backend to kill the spawned child process for this node
+    try {
+      await fetch('/api/chat/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId: selectedNodeId }),
+      });
+      setErrorToast({ message: 'AI 답변 생성이 중단되었습니다.', type: 'info' });
+    } catch (e: any) {
+      console.error('Failed to cancel generation:', e);
+    }
   };
 
   // 5. Adopt Node or Create Proposed branch
@@ -791,6 +844,21 @@ function App() {
     }
   };
 
+  // 11. Tab Switch & Collapsible Sidebar Handler (VS Code Style)
+  const handleTabClick = (tab: 'detail' | 'timeline' | 'spec' | 'devloop') => {
+    if (activePanelTab === tab && isSidebarOpen) {
+      setIsSidebarOpen(false);
+    } else {
+      setIsSidebarOpen(true);
+      setActivePanelTab(tab);
+      if (tab === 'timeline') {
+        fetchDecisionLogs();
+      } else if (tab === 'spec') {
+        fetchSpecText();
+      }
+    }
+  };
+
   // Extract variables for focused node details panel
   const focusedNode = useMemo(() => {
     return nodes.find(n => n.id === selectedNodeId) || null;
@@ -812,6 +880,40 @@ function App() {
     return nodes.filter(n => siblingIds.includes(n.id) && n.branchRole === 'candidate');
   }, [nodes, edges, selectedNodeId, focusedNode]);
 
+  // Developer Handover Audit Calculations
+  const handoverAudit = useMemo(() => {
+    const hasCandidatesLeft = nodes.some(n => n.branchRole === 'candidate');
+    const mainlineNodes = nodes.filter(n => n.branchRole === 'mainline' || n.kind === 'seed');
+    const unelaboratedNodesCount = mainlineNodes.filter(node => !messages.some(m => m.nodeId === node.id)).length;
+    const hasGapDetectorAudited = messages.some(m => m.author === 'gapDetector');
+    
+    let completedChecks = 0;
+    if (!hasCandidatesLeft) completedChecks++;
+    if (mainlineNodes.length > 0 && unelaboratedNodesCount === 0) completedChecks++;
+    if (hasGapDetectorAudited) completedChecks++;
+    const readinessPercentage = Math.round((completedChecks / 3) * 100);
+    
+    let progressColorClass = 'from-rose-500 to-amber-500';
+    let statusText = '추가 설계 및 검수 필요';
+    if (readinessPercentage >= 100) {
+      progressColorClass = 'from-emerald-500 to-teal-500';
+      statusText = '개발 인도 준비 완료!';
+    } else if (readinessPercentage >= 50) {
+      progressColorClass = 'from-violet-500 to-indigo-500';
+      statusText = '기본 구체화 완료, 보완 필요';
+    }
+
+    return {
+      hasCandidatesLeft,
+      mainlineNodesCount: mainlineNodes.length,
+      unelaboratedNodesCount,
+      hasGapDetectorAudited,
+      readinessPercentage,
+      progressColorClass,
+      statusText
+    };
+  }, [nodes, messages]);
+
   const seedNodeTitle = useMemo(() => {
     return nodes.find(n => n.kind === 'seed')?.title || 'LAO Studio';
   }, [nodes]);
@@ -831,7 +933,16 @@ function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Desktop Header Buttons (>= 768px) */}
+        <div className="md:flex hidden items-center gap-2">
+          {/* Help Guide button */}
+          <button
+            onClick={() => setShowHelpModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[11px] font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+          >
+            <HelpCircle size={13} className="text-violet-400" /> Help Guide
+          </button>
+
           {/* AI Settings button */}
           <button
             onClick={() => {
@@ -857,7 +968,7 @@ function App() {
           {/* View Decisions button */}
           <button
             onClick={handleViewDecisionLogs}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[11px] font-semibold text-slate-300 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-800 bg-slate-900/50 hover:bg-slate-800 text-[11px] font-semibold text-slate-300 transition-colors cursor-pointer"
           >
             <BookOpen size={13} /> Decision Logs
           </button>
@@ -871,10 +982,78 @@ function App() {
             <FileText size={13} /> {isCompiling ? 'Compiling...' : 'Compile Spec'}
           </button>
         </div>
+
+        {/* Mobile Header Menu Button (< 768px) */}
+        <div className="md:hidden block relative">
+          <button
+            onClick={() => setShowHeaderMenu(!showHeaderMenu)}
+            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/50 text-slate-300 hover:bg-slate-800 cursor-pointer"
+          >
+            {showHeaderMenu ? <X size={16} /> : <Menu size={16} />}
+          </button>
+
+          {/* Mobile Dropdown Menu */}
+          {showHeaderMenu && (
+            <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-2 z-50 flex flex-col gap-1 animate-fade-in">
+              <button
+                onClick={() => {
+                  setShowHelpModal(true);
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 cursor-pointer"
+              >
+                <HelpCircle size={14} className="text-violet-400" /> Help Guide
+              </button>
+              
+              <button
+                onClick={() => {
+                  setFormProvider(settings.provider);
+                  setFormModel(settings.model);
+                  if (settings.agents) {
+                    setFormAgents(settings.agents);
+                  }
+                  if (settings.developerLoop) {
+                    setFormBuildCommand(settings.developerLoop.buildCommand || 'npm run build');
+                    setFormLaunchCommand(settings.developerLoop.launchCommand || 'npm start');
+                    setFormVerifyCommand(settings.developerLoop.verifyCommand || 'npm test');
+                    setFormUiCheckCommand(settings.developerLoop.uiCheckCommand || '');
+                  }
+                  setActiveSettingsTab('global');
+                  setShowSettingsModal(true);
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 cursor-pointer"
+              >
+                <Settings size={14} /> AI Settings
+              </button>
+
+              <button
+                onClick={() => {
+                  handleViewDecisionLogs();
+                  setShowHeaderMenu(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg text-xs font-semibold text-slate-300 hover:bg-slate-800 cursor-pointer"
+              >
+                <BookOpen size={14} /> Decision Logs
+              </button>
+
+              <button
+                onClick={() => {
+                  handleCompileSpec();
+                  setShowHeaderMenu(false);
+                }}
+                disabled={isCompiling}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left rounded-lg text-xs font-bold text-violet-400 hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+              >
+                <FileText size={14} /> {isCompiling ? 'Compiling...' : 'Compile Spec'}
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Main Layout Area */}
-      <div className="flex-1 flex min-h-0 relative">
+      <div className="flex-1 flex min-h-0 relative overflow-hidden">
         
         {/* React Flow Mindmap Canvas */}
         <MindmapCanvas
@@ -886,16 +1065,32 @@ function App() {
           onAddFreeNode={handleAddFreeNode}
         />
 
+        {/* Collapsed Sidebar Menu Toggle Indicator for Mobile Overlay */}
+        {!isSidebarOpen && (
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="absolute top-4 right-4 z-20 p-2.5 rounded-xl border border-slate-800 bg-slate-900/90 text-violet-400 hover:text-violet-300 shadow-2xl cursor-pointer"
+            title="상세 패널 열기"
+          >
+            <Brain size={16} className="animate-pulse" />
+          </button>
+        )}
+
         {/* Right Sidebar Container */}
-        <div className="w-[450px] border-l border-slate-800 bg-slate-900/40 backdrop-blur-xl flex min-h-0 relative z-10">
+        <div className={`border-l border-slate-800 bg-slate-900/40 backdrop-blur-xl flex min-h-0 z-10 shrink-0 transition-all duration-300 
+          ${isSidebarOpen 
+            ? 'md:w-[450px] w-[calc(100vw-3rem)] md:relative absolute right-0 top-0 h-full' 
+            : 'w-12 md:relative absolute right-0 top-0 h-full'
+          }`}
+        >
           
           {/* Vertical Tab Bar (Left Edge of sidebar) */}
           <div className="w-12 border-r border-slate-800 bg-slate-950/40 flex flex-col items-center py-4 gap-4 shrink-0">
             <button
-              onClick={() => setActivePanelTab('detail')}
+              onClick={() => handleTabClick('detail')}
               title="Node Detail"
               className={`p-2 rounded-lg transition-all cursor-pointer ${
-                activePanelTab === 'detail'
+                isSidebarOpen && activePanelTab === 'detail'
                   ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
@@ -903,13 +1098,10 @@ function App() {
               <Brain size={16} />
             </button>
             <button
-              onClick={() => {
-                setActivePanelTab('timeline');
-                fetchDecisionLogs();
-              }}
+              onClick={() => handleTabClick('timeline')}
               title="Decision Timeline"
               className={`p-2 rounded-lg transition-all cursor-pointer ${
-                activePanelTab === 'timeline'
+                isSidebarOpen && activePanelTab === 'timeline'
                   ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
@@ -917,13 +1109,10 @@ function App() {
               <BookOpen size={16} />
             </button>
             <button
-              onClick={() => {
-                setActivePanelTab('spec');
-                fetchSpecText();
-              }}
+              onClick={() => handleTabClick('spec')}
               title="Specification Document"
               className={`p-2 rounded-lg transition-all cursor-pointer ${
-                activePanelTab === 'spec'
+                isSidebarOpen && activePanelTab === 'spec'
                   ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
@@ -931,10 +1120,10 @@ function App() {
               <FileText size={16} />
             </button>
             <button
-              onClick={() => setActivePanelTab('devloop')}
+              onClick={() => handleTabClick('devloop')}
               title="Developer Loop Console"
               className={`p-2 rounded-lg transition-all cursor-pointer ${
-                activePanelTab === 'devloop'
+                isSidebarOpen && activePanelTab === 'devloop'
                   ? 'bg-violet-600/20 text-violet-400 border border-violet-500/30'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
@@ -944,7 +1133,8 @@ function App() {
           </div>
 
           {/* Panel Content Pane */}
-          <div className="flex-1 flex flex-col min-h-0 bg-slate-900/60 overflow-hidden">
+          {isSidebarOpen && (
+            <div className="flex-1 flex flex-col min-h-0 bg-slate-900/60 overflow-hidden">
             {activePanelTab === 'detail' && (
               focusedNode ? (
                 <NodeDetailPanel
@@ -959,6 +1149,7 @@ function App() {
                   routingStatus={routingStatus}
                   lastProposal={lastProposal}
                   onClearProposal={() => setLastProposal(undefined)}
+                  onCancelGeneration={handleCancelGeneration}
                 />
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-slate-500 space-y-2">
@@ -1018,6 +1209,84 @@ function App() {
                     >
                       Download
                     </button>
+                  </div>
+                </div>
+
+                {/* Developer Handover Audit Widget */}
+                <div className="mb-4 p-4 rounded-xl border border-slate-800/80 bg-slate-950/40 backdrop-blur-md space-y-3 shrink-0">
+                  <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck size={13} className="text-violet-400" /> Developer Handover Audit
+                    </span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 font-semibold lowercase text-slate-500">
+                      readiness checker
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-white">{handoverAudit.statusText}</span>
+                      <span className="font-bold text-violet-400">{handoverAudit.readinessPercentage}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full bg-gradient-to-r ${handoverAudit.progressColorClass} transition-all duration-500`} 
+                        style={{ width: `${handoverAudit.readinessPercentage}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-slate-900 space-y-2">
+                    {/* Check 1: Candidates Left */}
+                    <div className="flex items-start gap-2 text-[10px] leading-normal">
+                      <span className="text-xs shrink-0 mt-0.5">
+                        {handoverAudit.hasCandidatesLeft ? '⚠️' : '✅'}
+                      </span>
+                      <div>
+                        <span className={`font-bold block ${handoverAudit.hasCandidatesLeft ? 'text-slate-400' : 'text-slate-200'}`}>
+                          의사결정 완결성 (분기 정리)
+                        </span>
+                        <span className="text-slate-500 text-[9px]">
+                          {handoverAudit.hasCandidatesLeft 
+                            ? '미결정된 대안 후보 노드(점선)가 남아 있습니다. 채택/아카이브 필요.' 
+                            : '모든 후보 갈림길의 의사결정이 정상 완료되었습니다.'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Check 2: Elaboration */}
+                    <div className="flex items-start gap-2 text-[10px] leading-normal">
+                      <span className="text-xs shrink-0 mt-0.5">
+                        {handoverAudit.unelaboratedNodesCount > 0 ? '⚠️' : '✅'}
+                      </span>
+                      <div>
+                        <span className={`font-bold block ${handoverAudit.unelaboratedNodesCount > 0 ? 'text-slate-400' : 'text-slate-200'}`}>
+                          설계 구체성 (메인라인 대화율)
+                        </span>
+                        <span className="text-slate-500 text-[9px]">
+                          {handoverAudit.unelaboratedNodesCount > 0 
+                            ? `구체화되지 않은 기획 노드가 ${handoverAudit.unelaboratedNodesCount}개 존재합니다. 참모들과의 대화가 필요합니다.` 
+                            : '모든 mainline 기획 노드가 최소 1회 이상의 에이전트 피드백을 수렴하였습니다.'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Check 3: Gap Detector Audit */}
+                    <div className="flex items-start gap-2 text-[10px] leading-normal">
+                      <span className="text-xs shrink-0 mt-0.5">
+                        {handoverAudit.hasGapDetectorAudited ? '✅' : '⚠️'}
+                      </span>
+                      <div>
+                        <span className={`font-bold block ${!handoverAudit.hasGapDetectorAudited ? 'text-slate-400' : 'text-slate-200'}`}>
+                          예외 처리 검수 (Gap Detector)
+                        </span>
+                        <span className="text-slate-500 text-[9px]">
+                          {!handoverAudit.hasGapDetectorAudited 
+                            ? '예외 처리 및 엣지 케이스가 아직 검수되지 않았습니다. Gap Detector 참모 호출을 권장합니다.' 
+                            : '에러 복구 및 예외 상태 규칙에 대한 Gap Detector 참모 검수가 완료되었습니다.'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1115,7 +1384,8 @@ function App() {
               </div>
             )}
           </div>
-        </div>
+        )}
+      </div>
 
         {/* Compile Success Toast Notification */}
         {compileResult && (
@@ -1129,6 +1399,39 @@ function App() {
                 설계서가 `.lao/spec_compiled.md`로 컴파일되었습니다. Claude Code에 바로 전달할 수 있습니다.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Error/Info Toast Notification */}
+        {errorToast && (
+          <div className={`absolute bottom-6 left-6 max-w-sm border rounded-lg p-4 shadow-2xl z-50 flex gap-3 animate-slide-in ${
+            errorToast.type === 'error' 
+              ? 'bg-slate-900 border-red-500/30 shadow-red-950/20' 
+              : 'bg-slate-900 border-cyan-500/30 shadow-cyan-950/20'
+          }`}>
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+              errorToast.type === 'error' ? 'bg-red-950/50' : 'bg-cyan-950/50'
+            }`}>
+              {errorToast.type === 'error' ? (
+                <AlertCircle size={14} className="text-red-400" />
+              ) : (
+                <Check size={14} className="text-cyan-400" />
+              )}
+            </div>
+            <div className="flex-1">
+              <h4 className="text-xs font-semibold text-white">
+                {errorToast.type === 'error' ? '오류 발생' : '알림'}
+              </h4>
+              <p className="text-[10px] text-slate-450 mt-0.5 leading-normal">
+                {errorToast.message}
+              </p>
+            </div>
+            <button 
+              onClick={() => setErrorToast(null)} 
+              className="text-[10px] text-slate-500 hover:text-slate-350 cursor-pointer align-top shrink-0"
+            >
+              닫기
+            </button>
           </div>
         )}
       </div>
@@ -1287,6 +1590,7 @@ function App() {
                           <option value="gemini">Gemini (CLI)</option>
                           <option value="claude">Claude (CLI)</option>
                           <option value="codex">Codex (CLI)</option>
+                          <option value="agy">Antigravity (AGY)</option>
                         </select>
                       </div>
 
@@ -1400,6 +1704,7 @@ function App() {
                       <option value="gemini">Gemini (CLI)</option>
                       <option value="claude">Claude (CLI)</option>
                       <option value="codex">Codex (CLI)</option>
+                      <option value="agy">Antigravity (AGY)</option>
                     </select>
                   </div>
 
@@ -1448,6 +1753,7 @@ function App() {
                             <option value="gemini">Gemini</option>
                             <option value="claude">Claude</option>
                             <option value="codex">Codex</option>
+                            <option value="agy">Antigravity (AGY)</option>
                           </select>
                         </div>
                         <div>
@@ -1544,6 +1850,74 @@ function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 전역 도움말 모달 */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 animate-fade-in">
+          <div className="relative w-full max-w-lg overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/95 p-6 shadow-2xl backdrop-blur-xl">
+            {/* Ambient gradients */}
+            <div className="absolute -top-20 -left-20 w-44 h-44 rounded-full bg-violet-600/10 blur-3xl pointer-events-none"></div>
+            <div className="absolute -bottom-20 -right-20 w-44 h-44 rounded-full bg-indigo-600/10 blur-3xl pointer-events-none"></div>
+
+            <div className="relative flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <HelpCircle size={16} className="text-violet-400" /> LAO Studio 사용 가이드
+              </h3>
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="text-xs text-slate-500 hover:text-slate-300 cursor-pointer"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="relative space-y-4 max-h-[60vh] overflow-y-auto pr-1 text-xs text-slate-300 leading-relaxed scrollbar-thin">
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-white flex items-center gap-1.5">🌱 1. 프로젝트 시작 (Seed)</h4>
+                <p className="text-[11px] text-slate-400 pl-4">
+                  첫 프로젝트 로드 시 제목과 핵심 주제를 입력하고 생성하면, 3가지 초기 대안(Option) 노드가 캔버스에 생성됩니다.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-white flex items-center gap-1.5">🌿 2. 대안 채택 (Adopt & Merge)</h4>
+                <p className="text-[11px] text-slate-400 pl-4">
+                  비교 대상 중 마음에 드는 대안 노드를 선택하고 <strong>Adopt as Mainline Choice</strong>를 누르면 메인라인 기획으로 채택되며, 결정 로그(Decision Log)에 기록됩니다. 여러 대안을 합치고 싶다면 <strong>Merge All</strong>을 활용할 수 있습니다.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-white flex items-center gap-1.5">💬 3. AI 참모 에이전트와 대화</h4>
+                <p className="text-[11px] text-slate-400 pl-4">
+                  메인라인 노드에 질문을 보내면 AI 디렉터가 내용을 분석하여 아래 4대 스텝 참모에게 자동 전달합니다:
+                </p>
+                <ul className="list-disc list-inside pl-6 space-y-1 text-[10px] text-slate-400">
+                  <li><strong className="text-purple-355 font-bold">Specifier (구체화)</strong>: 모호한 기획 내용을 상세 아키텍처나 기능으로 명세화</li>
+                  <li><strong className="text-emerald-355 font-bold">Optionizer (대안 제시)</strong>: 결정하기 어려운 부분에 대해 2~4가지 선택 분기점 제시</li>
+                  <li><strong className="text-sky-355 font-bold">Researcher (레퍼런스 조사)</strong>: 관련 오픈소스, 타사 유사 기능 및 업계 표준 조사</li>
+                  <li><strong className="text-rose-355 font-bold">Gap Detector (공백 감지)</strong>: 설계 누락, 보안 취약점, 엣지 케이스 점검</li>
+                </ul>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-bold text-white flex items-center gap-1.5">📝 4. 명세서 컴파일 (Compile Spec)</h4>
+                <p className="text-[11px] text-slate-400 pl-4">
+                  마인드맵 기획 확장이 완료되면 헤더의 <strong>Compile Spec</strong> 버튼을 눌러 전체 Decided 트리 구조와 의사결정 기록을 하나의 깔끔한 Markdown 명세서 파일(`.lao/spec_compiled.md`)로 빌드할 수 있습니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 border-t border-slate-800 pt-3 flex justify-end">
+              <button
+                onClick={() => setShowHelpModal(false)}
+                className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-bold text-[10px] cursor-pointer transition-all"
+              >
+                이해했습니다
+              </button>
+            </div>
           </div>
         </div>
       )}

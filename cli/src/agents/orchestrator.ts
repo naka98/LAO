@@ -99,6 +99,7 @@ export class AgentOrchestrator {
       prompt: stepPrompt,
       jsonMode: false,
       role: route,
+      nodeId: params.focusedNodeId,
     });
 
     // 3. Extract Optional Proposals
@@ -211,6 +212,7 @@ export class AgentOrchestrator {
       prompt: stepPrompt,
       jsonMode: false,
       role: route,
+      nodeId: params.focusedNodeId,
       onChunk: (chunk) => params.onChunk({ type: 'content', chunk }),
     });
 

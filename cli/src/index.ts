@@ -6,6 +6,7 @@ import { exec, spawn } from 'child_process';
 import { StorageManager } from './storage';
 import { AgentOrchestrator } from './agents/orchestrator';
 import { SpecCompiler } from './compiler';
+import { activeProcesses, getShellInfo } from './gemini';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -129,6 +130,25 @@ app.post('/api/chat', async (req, res) => {
     });
   } catch (error: any) {
     console.error('Chat API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.5. Cancel Running AI Agent Chat
+app.post('/api/chat/cancel', (req, res) => {
+  try {
+    const { nodeId } = req.body;
+    if (!nodeId) {
+      return res.status(400).json({ error: 'nodeId is required' });
+    }
+    const child = activeProcesses.get(nodeId);
+    if (child) {
+      child.kill('SIGINT');
+      res.json({ success: true, message: 'Generation cancelled' });
+    } else {
+      res.json({ success: false, message: 'No active generation found for this node' });
+    }
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -296,7 +316,9 @@ app.get('/api/devloop/run', async (req, res) => {
 
     res.write(`data: ${JSON.stringify({ type: 'start', command })}\n\n`);
 
-    const child = spawn('/bin/zsh', ['-lc', command], {
+    const { shell, args: shellArgs } = getShellInfo();
+
+    const child = spawn(shell, [...shellArgs, command], {
       cwd: PROJECT_ROOT,
       env: process.env,
     });
