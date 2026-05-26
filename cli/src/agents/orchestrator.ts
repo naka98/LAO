@@ -1,14 +1,17 @@
-import { MindmapData, GraphNode, GraphEdge, NodeMessage, NodeMessageAuthor } from '../models';
+import { ProjectConfig, SpecSection, DecisionCard, NodeMessage } from '../models';
 import { GeminiClient } from '../gemini';
-import { PromptBuilder, ParsedProposal } from './promptBuilder';
+import { PromptBuilder } from './promptBuilder';
 import { randomUUID } from 'crypto';
 
 export interface RouteAndRespondResult {
   route: 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
   reasoning: string;
   prose: string;
-  proposal: ParsedProposal;
-  updatedData: MindmapData;
+  specUpdate?: {
+    sectionId: string;
+    title?: string;
+    content: string;
+  };
 }
 
 export class AgentOrchestrator {
@@ -19,157 +22,142 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Routes the client message and gets a response from the designated step agent.
+   * Helper to clean markdown JSON fences before parsing
    */
-  public async routeAndRespond(params: {
-    data: MindmapData;
-    projectName: string;
-    projectDesc: string;
-    focusedNodeId: string;
-    userMessage: string;
-  }): Promise<RouteAndRespondResult> {
-    const data = JSON.parse(JSON.stringify(params.data)) as MindmapData; // deep clone
-    const focusedNode = data.nodes.find(n => n.id === params.focusedNodeId);
-    if (!focusedNode) {
-      throw new Error(`Focused node not found: ${params.focusedNodeId}`);
+  private cleanJsonResponse(raw: string): string {
+    let cleaned = raw.trim();
+    if (cleaned.startsWith('```json')) {
+      cleaned = cleaned.substring(7);
+    } else if (cleaned.startsWith('```')) {
+      cleaned = cleaned.substring(3);
     }
+    if (cleaned.endsWith('```')) {
+      cleaned = cleaned.substring(0, cleaned.length - 3);
+    }
+    return cleaned.trim();
+  }
 
-    const seedNode = data.nodes.find(n => n.kind === 'seed') || focusedNode;
-
-    // Filter chat history for this node
-    const nodeHistory = data.messages.filter(m => m.nodeId === params.focusedNodeId);
-
-    // Save user message to history first
-    const userMsgId = randomUUID();
-    const now = new Date().toISOString();
-    const userMsg: NodeMessage = {
-      id: userMsgId,
-      nodeId: params.focusedNodeId,
-      author: 'user',
-      content: params.userMessage,
-      createdAt: now,
-    };
-    data.messages.push(userMsg);
-    nodeHistory.push(userMsg);
-
-    // 1. Director Routing
-    const directorPrompt = PromptBuilder.buildDirectorRoutingPrompt({
-      projectName: params.projectName,
-      projectDesc: params.projectDesc,
-      ideaTitle: seedNode.title,
-      focusedNode,
-      chatHistory: nodeHistory.slice(0, -1), // skip the latest user msg for classification context
-      userMessage: params.userMessage,
-    });
-
-    let route: 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' = 'specifier';
-    let routingReason = 'Vague intent fallback';
-
+  /**
+   * Helper to extract optional spec update blocks from prose responses
+   */
+  private extractSpecUpdate(response: string): { prose: string; specUpdate?: { sectionId: string; title?: string; content: string } } {
+    const marker = '```specUpdate';
+    const index = response.indexOf(marker);
+    if (index === -1) {
+      return { prose: response.trim() };
+    }
+    const prose = response.substring(0, index).trim();
+    const rest = response.substring(index + marker.length);
+    const closeIndex = rest.indexOf('```');
+    if (closeIndex === -1) {
+      return { prose };
+    }
+    const jsonBody = rest.substring(0, closeIndex).trim();
     try {
-      const directorResponseRaw = await this.geminiClient.generateText({
-        prompt: directorPrompt,
-        jsonMode: true,
-        role: 'director',
-      });
-
-      const parsedRouting = JSON.parse(directorResponseRaw);
-      if (
-        parsedRouting.route &&
-        ['specifier', 'researcher', 'optionizer', 'gapDetector'].includes(parsedRouting.route)
-      ) {
-        route = parsedRouting.route;
-        routingReason = parsedRouting.reasoning || '';
+      const specUpdate = JSON.parse(jsonBody);
+      if (specUpdate && specUpdate.sectionId && specUpdate.content) {
+        return { prose, specUpdate };
       }
     } catch (e) {
-      console.warn('Director routing failed or parsed incorrectly. Falling back to specifier.', e);
+      console.warn('Failed to parse specUpdate JSON:', e);
     }
+    return { prose };
+  }
 
-    // 2. Step Agent Response
-    const stepPrompt = PromptBuilder.buildStepPrompt({
-      agentType: route,
-      projectName: params.projectName,
-      projectDesc: params.projectDesc,
-      ideaTitle: seedNode.title,
-      focusedNode,
-      chatHistory: nodeHistory,
-      userProfile: data.userProfile || { name: 'Designer', title: 'Product Creator', bio: '' },
+  /**
+   * Sprout draft specifications based on project config and golden rules
+   */
+  public async runIntakeSprout(config: ProjectConfig): Promise<{ coreSpec: string; features: SpecSection[] }> {
+    const prompt = PromptBuilder.buildIntakeSproutPrompt({
+      projectName: config.projectName,
+      projectDesc: config.projectDesc,
+      goldenRules: config.goldenRules
     });
 
-    const stepResponseRaw = await this.geminiClient.generateText({
-      prompt: stepPrompt,
-      jsonMode: false,
-      role: route,
-      nodeId: params.focusedNodeId,
+    const responseRaw = await this.geminiClient.generateText({
+      prompt,
+      jsonMode: true,
+      role: 'specifier'
     });
 
-    // 3. Extract Optional Proposals
-    const { prose, kind } = PromptBuilder.extractAnyProposal(stepResponseRaw);
+    const cleaned = this.cleanJsonResponse(responseRaw);
+    const parsed = JSON.parse(cleaned);
 
-    // 4. Save Agent Message to history
-    const agentMsgId = randomUUID();
-    const agentMsg: NodeMessage = {
-      id: agentMsgId,
-      nodeId: params.focusedNodeId,
-      author: route as NodeMessageAuthor,
-      content: prose,
-      createdAt: new Date().toISOString(),
-    };
-    data.messages.push(agentMsg);
-
-    focusedNode.updatedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    const features: SpecSection[] = (parsed.features || []).map((f: any) => ({
+      id: f.id || randomUUID().substring(0, 8),
+      title: f.title || 'Untitled Feature',
+      content: f.content || '',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now
+    }));
 
     return {
-      route,
-      reasoning: routingReason,
-      prose,
-      proposal: kind,
-      updatedData: data,
+      coreSpec: parsed.coreSpec || `# Core Spec\n\nConforming to Golden Rules.`,
+      features
     };
   }
 
   /**
-   * Routes the client message and streams response from the designated step agent.
+   * Analyze spec sections to propose Decision Cards (architectural choices)
+   */
+  public async runOptionizerFork(config: ProjectConfig, sections: SpecSection[]): Promise<DecisionCard[]> {
+    const prompt = PromptBuilder.buildOptionizerForkPrompt({ config, sections });
+    const responseRaw = await this.geminiClient.generateText({
+      prompt,
+      jsonMode: true,
+      role: 'optionizer'
+    });
+
+    const cleaned = this.cleanJsonResponse(responseRaw);
+    const parsed = JSON.parse(cleaned);
+
+    const now = new Date().toISOString();
+    const cards: DecisionCard[] = (parsed || []).map((c: any) => ({
+      id: c.id || randomUUID().substring(0, 8),
+      section: c.section || 'General',
+      title: c.title || 'Untitled Choice',
+      options: (c.options || []).map((opt: any) => ({
+        name: opt.name || 'Option',
+        desc: opt.desc || '',
+        approved: !!opt.approved
+      })),
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now
+    }));
+
+    return cards;
+  }
+
+  /**
+   * Analyze spec sections for flaws, omissions, or contradictions
+   */
+  public async runGapDetectorReview(config: ProjectConfig, sections: SpecSection[]): Promise<string> {
+    const prompt = PromptBuilder.buildGapDetectorReviewPrompt({ config, sections });
+    return this.geminiClient.generateText({
+      prompt,
+      role: 'gapDetector'
+    });
+  }
+
+  /**
+   * Main routing and streaming chat responder for the workspace
    */
   public async routeAndRespondStream(params: {
-    data: MindmapData;
-    projectName: string;
-    projectDesc: string;
-    focusedNodeId: string;
+    config: ProjectConfig;
+    sections: SpecSection[];
+    chatHistory: NodeMessage[];
     userMessage: string;
     onChunk: (data: { type: 'routing' | 'content'; route?: string; reasoning?: string; chunk?: string }) => void;
   }): Promise<RouteAndRespondResult> {
-    const data = JSON.parse(JSON.stringify(params.data)) as MindmapData; // deep clone
-    const focusedNode = data.nodes.find(n => n.id === params.focusedNodeId);
-    if (!focusedNode) {
-      throw new Error(`Focused node not found: ${params.focusedNodeId}`);
-    }
-
-    const seedNode = data.nodes.find(n => n.kind === 'seed') || focusedNode;
-
-    // Filter chat history for this node
-    const nodeHistory = data.messages.filter(m => m.nodeId === params.focusedNodeId);
-
-    // Save user message to history first
-    const userMsgId = randomUUID();
-    const now = new Date().toISOString();
-    const userMsg: NodeMessage = {
-      id: userMsgId,
-      nodeId: params.focusedNodeId,
-      author: 'user',
-      content: params.userMessage,
-      createdAt: now,
-    };
-    data.messages.push(userMsg);
-    nodeHistory.push(userMsg);
-
-    // 1. Director Routing
+    
+    // 1. Route message using Director
     const directorPrompt = PromptBuilder.buildDirectorRoutingPrompt({
-      projectName: params.projectName,
-      projectDesc: params.projectDesc,
-      ideaTitle: seedNode.title,
-      focusedNode,
-      chatHistory: nodeHistory.slice(0, -1), // skip the latest user msg for classification context
-      userMessage: params.userMessage,
+      config: params.config,
+      chatHistory: params.chatHistory,
+      userMessage: params.userMessage
     });
 
     let route: 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' = 'specifier';
@@ -179,10 +167,11 @@ export class AgentOrchestrator {
       const directorResponseRaw = await this.geminiClient.generateText({
         prompt: directorPrompt,
         jsonMode: true,
-        role: 'director',
+        role: 'director'
       });
 
-      const parsedRouting = JSON.parse(directorResponseRaw);
+      const cleanedDirector = this.cleanJsonResponse(directorResponseRaw);
+      const parsedRouting = JSON.parse(cleanedDirector);
       if (
         parsedRouting.route &&
         ['specifier', 'researcher', 'optionizer', 'gapDetector'].includes(parsedRouting.route)
@@ -191,228 +180,34 @@ export class AgentOrchestrator {
         routingReason = parsedRouting.reasoning || '';
       }
     } catch (e) {
-      console.warn('Director routing failed or parsed incorrectly. Falling back to specifier.', e);
+      console.warn('[LAO Director] Routing failed, defaulting to specifier', e);
     }
 
-    // Call onChunk with the classification result so the UI updates the routing chip
+    // Notify client of selected agent route
     params.onChunk({ type: 'routing', route, reasoning: routingReason });
 
-    // 2. Step Agent Response
-    const stepPrompt = PromptBuilder.buildStepPrompt({
+    // 2. Generate agent response stream
+    const agentPrompt = PromptBuilder.buildAgentChatPrompt({
       agentType: route,
-      projectName: params.projectName,
-      projectDesc: params.projectDesc,
-      ideaTitle: seedNode.title,
-      focusedNode,
-      chatHistory: nodeHistory,
-      userProfile: data.userProfile || { name: 'Designer', title: 'Product Creator', bio: '' },
+      config: params.config,
+      sections: params.sections,
+      chatHistory: params.chatHistory
     });
 
-    const stepResponseRaw = await this.geminiClient.generateText({
-      prompt: stepPrompt,
-      jsonMode: false,
+    const responseRaw = await this.geminiClient.generateText({
+      prompt: agentPrompt,
       role: route,
-      nodeId: params.focusedNodeId,
-      onChunk: (chunk) => params.onChunk({ type: 'content', chunk }),
+      onChunk: (chunk) => params.onChunk({ type: 'content', chunk })
     });
 
-    // 3. Extract Optional Proposals
-    const { prose, kind } = PromptBuilder.extractAnyProposal(stepResponseRaw);
-
-    // 4. Save Agent Message to history
-    const agentMsgId = randomUUID();
-    const agentMsg: NodeMessage = {
-      id: agentMsgId,
-      nodeId: params.focusedNodeId,
-      author: route as NodeMessageAuthor,
-      content: prose,
-      createdAt: new Date().toISOString(),
-    };
-    data.messages.push(agentMsg);
-
-    focusedNode.updatedAt = new Date().toISOString();
+    // 3. Extract spec updates from response
+    const { prose, specUpdate } = this.extractSpecUpdate(responseRaw);
 
     return {
       route,
       reasoning: routingReason,
       prose,
-      proposal: kind,
-      updatedData: data,
-    };
-  }
-
-  /**
-   * Generates comparative reasoning when user adopts a node, saving the log.
-   */
-  public async generateAdoptionReason(params: {
-    data: MindmapData;
-    projectName: string;
-    projectDesc: string;
-    parentNodeId: string;
-    adoptedNodeId: string;
-    siblingNodeIds: string[];
-  }): Promise<{ reasoning: string; updatedData: MindmapData }> {
-    const data = JSON.parse(JSON.stringify(params.data)) as MindmapData;
-    
-    const parentNode = data.nodes.find(n => n.id === params.parentNodeId);
-    const adoptedNode = data.nodes.find(n => n.id === params.adoptedNodeId);
-    const siblingNodes = data.nodes.filter(n => params.siblingNodeIds.includes(n.id));
-
-    if (!parentNode || !adoptedNode) {
-      throw new Error('Parent or adopted node not found');
-    }
-
-    const seedNode = data.nodes.find(n => n.kind === 'seed') || parentNode;
-    const history = data.messages.filter(m => m.nodeId === params.parentNodeId);
-
-    const prompt = PromptBuilder.buildAdoptionReasoningPrompt({
-      projectName: params.projectName,
-      projectDesc: params.projectDesc,
-      ideaTitle: seedNode.title,
-      parentNode,
-      adopted: adoptedNode,
-      siblings: siblingNodes,
-      chatHistory: history,
-    });
-
-    let reasoning = `Adopted ${adoptedNode.title} as mainline.`;
-    try {
-      reasoning = await this.geminiClient.generateText({ prompt, role: 'director' });
-    } catch (e) {
-      console.warn('Failed to generate adoption reason from Gemini, using fallback.', e);
-    }
-
-    // Add Director explanation message
-    const msgId = randomUUID();
-    data.messages.push({
-      id: msgId,
-      nodeId: params.parentNodeId,
-      author: 'director',
-      content: `[Adoption Decision] ${reasoning}`,
-      createdAt: new Date().toISOString(),
-    });
-
-    // Mark adopted node status as decided and mainline
-    adoptedNode.status = 'decided';
-    adoptedNode.branchRole = 'mainline';
-    adoptedNode.updatedAt = new Date().toISOString();
-
-    // Sibling nodes become dimmed and archived/candidate
-    siblingNodes.forEach(sibling => {
-      sibling.status = 'folded';
-      sibling.branchRole = 'archived';
-      sibling.updatedAt = new Date().toISOString();
-    });
-
-    return {
-      reasoning,
-      updatedData: data,
-    };
-  }
-
-  /**
-   * Merges multiple candidate nodes into one mainline node.
-   */
-  public async mergeNodes(params: {
-    data: MindmapData;
-    projectName: string;
-    projectDesc: string;
-    parentNodeId: string;
-    candidateIds: string[];
-  }): Promise<{ mergedNode: GraphNode; updatedData: MindmapData }> {
-    const data = JSON.parse(JSON.stringify(params.data)) as MindmapData;
-
-    const parentNode = data.nodes.find(n => n.id === params.parentNodeId);
-    const candidates = data.nodes.filter(n => params.candidateIds.includes(n.id));
-
-    if (!parentNode || candidates.length === 0) {
-      throw new Error('Parent node or candidates not found');
-    }
-
-    const seedNode = data.nodes.find(n => n.kind === 'seed') || parentNode;
-    const history = data.messages.filter(m => m.nodeId === params.parentNodeId);
-
-    const prompt = PromptBuilder.buildMergePrompt({
-      projectName: params.projectName,
-      projectDesc: params.projectDesc,
-      ideaTitle: seedNode.title,
-      parentNode,
-      candidates,
-      chatHistory: history,
-    });
-
-    let mergedTitle = 'Merged Concept';
-    let mergedBody = 'Synthesized from multiple choices.';
-    let reasoning = 'Merged selected nodes.';
-
-    try {
-      const responseRaw = await this.geminiClient.generateText({ prompt, jsonMode: true, role: 'director' });
-      const parsed = JSON.parse(responseRaw);
-      mergedTitle = parsed.title || mergedTitle;
-      mergedBody = parsed.body || mergedBody;
-      reasoning = parsed.reasoning || reasoning;
-    } catch (e) {
-      console.warn('Merge synthesis call failed, using default fallback.', e);
-    }
-
-    const now = new Date().toISOString();
-    const mergedNodeId = randomUUID();
-
-    // Create the merged node
-    const mergedNode: GraphNode = {
-      id: mergedNodeId,
-      kind: 'free',
-      status: 'decided',
-      branchRole: 'mainline',
-      title: mergedTitle,
-      body: mergedBody,
-      position: {
-        x: parentNode.position.x + 200,
-        y: parentNode.position.y,
-      },
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    data.nodes.push(mergedNode);
-
-    // Create parent -> child edge
-    const parentEdge: GraphEdge = {
-      id: randomUUID(),
-      fromNodeId: params.parentNodeId,
-      toNodeId: mergedNodeId,
-      kind: 'parentChild',
-      createdAt: now,
-    };
-    data.edges.push(parentEdge);
-
-    // Create 'supersedes' edges from candidates to mergedNode, and change candidates to archived
-    candidates.forEach(candidate => {
-      candidate.status = 'folded';
-      candidate.branchRole = 'archived';
-      candidate.updatedAt = now;
-
-      data.edges.push({
-        id: randomUUID(),
-        fromNodeId: candidate.id,
-        toNodeId: mergedNodeId,
-        kind: 'supersedes',
-        createdAt: now,
-      });
-    });
-
-    // Add Director explanation message
-    data.messages.push({
-      id: randomUUID(),
-      nodeId: params.parentNodeId,
-      author: 'director',
-      content: `[Merge Synthesis] ${reasoning}`,
-      createdAt: now,
-    });
-
-    return {
-      mergedNode,
-      updatedData: data,
+      specUpdate
     };
   }
 }

@@ -1,53 +1,76 @@
-export type GraphNodeKind = 'seed' | 'starter' | 'free' | 'decision' | 'option' | 'research' | 'gap';
-export type GraphNodeStatus = 'pending' | 'exploring' | 'decided' | 'dimmed' | 'folded';
-export type GraphNodeBranchRole = 'mainline' | 'candidate' | 'archived';
-
-export interface Position {
-  x: number;
-  y: number;
-}
-
-export interface GraphNode {
+export interface SpecSection {
   id: string;
-  kind: GraphNodeKind;
-  status: GraphNodeStatus;
-  branchRole: GraphNodeBranchRole;
   title: string;
-  body: string;
-  position: Position;
+  content: string;
+  status: 'active' | 'deprecated';
   createdAt: string;
   updatedAt: string;
 }
 
-export type GraphEdgeKind = 'parentChild' | 'sibling' | 'reference' | 'supersedes';
-
-export interface GraphEdge {
-  id: string;
-  fromNodeId: string;
-  toNodeId: string;
-  kind: GraphEdgeKind;
-  createdAt: string;
+export interface DecisionOption {
+  name: string;
+  desc: string;
+  approved: boolean;
 }
 
-export type NodeMessageAuthor = 'user' | 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
+export interface DecisionCard {
+  id: string;
+  section: string;
+  title: string;
+  options: DecisionOption[];
+  status: 'pending' | 'decided';
+  reason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GoldenRules {
+  frontend: string;
+  backend: string;
+  database: string;
+  additional: string;
+}
+
+export interface AgentSetting {
+  provider: string;
+  model: string;
+}
+
+export interface ProjectConfig {
+  projectName: string;
+  projectDesc: string;
+  automationLevel: 'supervised' | 'interactive' | 'autopilot';
+  phase: 'planning' | 'development';
+  goldenRules: GoldenRules;
+  settings: {
+    provider: string;
+    model: string;
+    agents: {
+      director: AgentSetting;
+      specifier: AgentSetting;
+      researcher: AgentSetting;
+      optionizer: AgentSetting;
+      gapDetector: AgentSetting;
+    };
+  };
+  developerLoop: {
+    buildCommand: string;
+    launchCommand: string;
+    verifyCommand: string;
+    uiCheckCommand: string;
+  };
+}
 
 export interface NodeMessage {
   id: string;
-  nodeId: string;
-  author: NodeMessageAuthor;
+  author: 'user' | 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
   content: string;
   createdAt: string;
 }
 
-export interface UserProfile {
-  name: string;
-  title: string;
-  bio: string;
-}
-
-export interface MindmapData {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
+export interface ProjectStateData {
+  config: ProjectConfig;
+  sections: SpecSection[];
+  decisions: DecisionCard[];
   messages: NodeMessage[];
-  userProfile?: UserProfile;
 }
