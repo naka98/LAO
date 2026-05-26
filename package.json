@@ -1,0 +1,33 @@
+{
+  "name": "lao",
+  "version": "0.9.0",
+  "description": "LAO (Local AI Office) - CLI Core & Web UI",
+  "main": "cli/dist/index.js",
+  "bin": {
+    "lao": "./cli/dist/index.js"
+  },
+  "scripts": {
+    "prepare": "node prepare.js",
+    "build": "node prepare.js --build-only",
+    "start": "node cli/dist/index.js"
+  },
+  "files": [
+    "cli/dist",
+    "web/dist"
+  ],
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
+  },
+  "keywords": [
+    "lao",
+    "ai",
+    "design",
+    "workflow",
+    "local-ai"
+  ],
+  "author": "naka98",
+  "license": "MIT"
+}

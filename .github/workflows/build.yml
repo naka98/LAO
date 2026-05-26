@@ -1,4 +1,4 @@
-name: Build
+name: Build & Verify
 
 on:
   push:
@@ -7,37 +7,31 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: macOS Build
-    runs-on: macos-26
+  build-and-verify:
+    name: Build and Verify CLI & WebUI
+    runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          # Full history needed for build-number injection (git rev-list --count HEAD)
-          fetch-depth: 0
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            cli/package-lock.json
+            web/package-lock.json
 
-      - name: Select Xcode 26.4
-        run: sudo xcode-select -s /Applications/Xcode_26.4.app
-
-      - name: Show Xcode Version
-        run: xcodebuild -version
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate Xcode Project
-        run: xcodegen generate
-
-      - name: Build LAO
+      - name: Install & Build Backend (cli)
         run: |
-          set -o pipefail
-          xcodebuild \
-            -project LAO.xcodeproj \
-            -scheme LAO \
-            -destination 'platform=macOS' \
-            -configuration Debug \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            build
+          cd cli
+          npm ci
+          npm run build
+
+      - name: Install & Build Frontend (web)
+        run: |
+          cd web
+          npm ci
+          npm run build

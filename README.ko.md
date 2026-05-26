@@ -1,161 +1,111 @@
-[English](README.md) | 한국어
+# LAO (Local AI Office)
 
-# LAO macOS App
-
-![Build](https://github.com/naka98/LAO/actions/workflows/build.yml/badge.svg)
-![macOS](https://img.shields.io/badge/macOS-15.0%2B-blue)
-![Swift](https://img.shields.io/badge/Swift-6.0-orange)
-![License](https://img.shields.io/badge/License-MIT-green)
-
-LAO는 SwiftUI로 만든 macOS 네이티브 AI 디자인 워크플로우 앱이다. CLI 기반 AI 에이전트를 통해 아이디어를 AI 실행 친화적인 설계 문서로 변환한다.
+LAO는 플랫폼 독립적이며 개발자 중심의 AI 설계 워크플로우 애플리케이션으로, **Node.js (Express)** 백엔드와 **React (Vite + React Flow)** 프론트엔드로 구축되어 있습니다. 로컬 환경에 로그인된 다양한 CLI AI 도구들(`claude`, `gemini`, `codex`)을 셸 프로세스로 직접 호출해 사용자의 아이디어를 체계적이고 세련된 소프트웨어 기획서 및 구조로 자동 확장합니다.
 
 ---
 
-## 스크린샷
+## 아키텍처 전환 배경 (macOS 네이티브 -> CLI + WebUI)
 
-| IdeaBoard | 접근 방식 선택 |
-|:---:|:---:|
-| ![IdeaBoard](docs/images/01.png) | ![Approach Selection](docs/images/02.png) |
-| AI 전문가 패널이 아이디어를 탐색 | 여러 접근 방식을 나란히 비교 |
-
-| Planning — Work Graph | Planning — 상세와 의사결정 |
-|:---:|:---:|
-| ![Planning](docs/images/03.png) | ![Planning Details](docs/images/04.png) |
-| 설계 구조를 시각화 | 스펙을 파고들고 질문을 해결 |
+LAO는 원래 macOS 전용 SwiftUI 데스크톱 앱으로 설계되었으나, 다음과 같은 기술적/운영적 한계를 극복하기 위해 v0.9 버전에서 **Node.js CLI + React Flow Web UI** 아키텍처로 완전히 전환되었습니다:
+1. **플랫폼 독립성**: macOS에 국한되지 않고 Windows, Linux 등 다양한 OS 환경에서 누구나 동일한 로컬 AI 협업 환경을 구축할 수 있도록 이식성을 확보했습니다.
+2. **유연한 개발자 환경(DevLoop) 연동**: 터미널 명령어 실행 결과를 브라우저에서 직접 가로채어 실시간 스트리밍하고, 로컬 파일 시스템의 기획서를 다루는 데 있어 Node.js 백엔드가 샌드박스로 제한된 AppKit/SwiftUI 환경보다 훨씬 강력한 통합 환경을 제공합니다.
+3. **캔버스 시각화 생산성**: React Flow 생태계를 활용해 복잡한 대안 노드의 생성, 병합, 배치 연산 및 실시간 에디터 연동을 더욱 미려하고 풍부한 Glassmorphic 테마로 신속하게 구현할 수 있게 되었습니다.
 
 ---
 
-## 기능
+## 핵심 기능
 
-### Design Workflow (핵심 기능)
-- AI 기반 설계 구조화: 아이디어 탐색, 접근 방식 선택, 산출물 상세화
-- 다단계 실행: Input → Analyzing → Approach Selection → Planning → Completed
-- 핵심 분기점마다 사용자 의사결정(Human-in-the-loop)
-- 백그라운드 실행과 알림
-- Design session 영속화와 이어서 작업 재개
-
-### IdeaBoard (메인 허브)
-- AI 전문가 패널과 함께 아이디어 탐색
-- 방향 수렴(Synthesis)과 Work Graph 추출
-- 아이디어에서 디자인 워크플로우로 매끄럽게 전환
-
-### 프로젝트 관리
-- 멀티 프로젝트 워크스페이스와 런처
-- 에이전트 설정 (Director, Fallback, Step 티어)
-- 프로바이더 지원: Claude, Codex, Gemini
-- 프로젝트별 스킬 관리
-
-### Claude Code / Codex 핸드오프
-- 워크플로우 완료 시 정해진 산출물 세트(`design.json`, `DESIGN_SPEC.md`, `BRD.md`, `PLAN.md`, `TEST.md`, …)를 `{project_root}/.lao/{ideaId}/{requestId}/`에 내보낸다
-- 프로젝트 루트에 `.mcp.json`을 자동 작성하여 번들된 `LAOMCPServer`를 등록 → MCP 인식 AI 도구가 설계서를 자동 발견한다
-- "Open in Claude Code / Codex" 원클릭으로 선택한 CLI를 Terminal에서 실행하고, 초기 프롬프트가 `DESIGN_SPEC.md`를 가리킨다
-- 전체 파일 목록·MCP 리소스/툴 표면·전제 조건은 [docs/handoff.ko.md](docs/handoff.ko.md) 참고
+1. **로컬 CLI AI 엔진**: 시스템 CLI 실행 경로의 `gemini`, `claude`, `codex` 명령어 프로세스를 `spawn` 구조로 직접 호출하여 AI를 실행합니다. 명령어 한계를 초과하지 않도록 프롬프트를 임시 파일로 자동 파이프라인 처리합니다.
+2. **다중 에이전트 협업 체계**: AI 에이전트들의 대화를 분류하는 "디렉터(Director)" 에이전트와 분야별 고유 능력을 갖춘 4개 스텝 에이전트(Step Agent)가 유기적으로 작동합니다:
+   * **Specifier (구체화)**: 요구사항 구체화 및 소프트웨어 컴포넌트 구조 정의
+   * **Researcher (조사)**: 구현을 위한 기술 스택 조사 및 논리적 타당성 검증
+   * **Optionizer (대안 제시)**: 선택 가능한 여러 대안(Branch) 설계 도출
+   * **Gap Detector (공백 감지)**: 논리적 허점, 예외 케이스 및 누락 항목 도출
+3. **인터랙티브 마인드맵 (React Flow)**: 구상한 개념을 시각적 캔버스로 탐색합니다. 후보군 노드(Candidate)를 캔버스에 붙이거나(Sprout), 메인라인으로 채택(Adopt)하고, 여러 대안을 하나의 노드로 병합(Merge)할 수 있습니다.
+4. **온보딩 시드 모달**: 첫 진입 시 프로젝트의 명칭과 기본 아이디어를 입력하고 기본 AI 설정을 마친 뒤 시작하면, 에이전트가 즉시 초기 대안 3가지를 마인드맵 노드에 자동으로 부착해 줍니다.
+5. **에이전트별 세부 프로바이더 설정**: 5개 에이전트 역할별로 사용할 프로바이더(Gemini, Claude, Codex)와 모델을 UI 상에서 독립적으로 구성하고 실시간으로 저장 및 오버라이드할 수 있습니다.
+6. **실시간 SSE 토큰 스트리밍**: 대화 입력 시, AI가 한 글자씩 실시간으로 작성하는 부드러운 타이핑 효과가 노드 대화창에 반영됩니다.
+7. **개발자 루프 콘솔 (DevLoop)**: 기획 중인 프로젝트의 검증 명령어(빌드, 단위 테스트, 서버 실행 등)를 Web UI 내부에서 호출하고, 셸 표준 출력(stdout/stderr)을 검은색 가상 터미널 로그로 실시간 스트리밍하여 확인합니다.
+8. **의사결정 히스토리 타임라인**: 자식 노드 채택 시 기록되는 `.lao/criteria.md`를 파싱하여 의사결정 진행 이력을 시간순으로 축적된 카드 형태로 한눈에 볼 수 있습니다.
+9. **기획 명세서 실시간 렌더러**: 캔버스의 모든 노드 상태를 수합해 최종 Markdown 명세서(`spec_compiled.md`)를 작성해 주며, UI 상에서 즉시 복사(Copy)하거나 다운로드할 수 있습니다.
 
 ---
 
-## 아키텍처
-
-### 디렉토리 구조
+## 프로젝트 구조
 
 ```
 LAO/
-├── project.yml                        # XcodeGen spec
-├── Package.swift                      # SPM 패키지 정의
-├── LAOApp/                            # SwiftUI 애플리케이션
-│   ├── App/
-│   │   ├── LAOApp.swift               # @main 진입점 (멀티윈도우 Scene API)
-│   │   ├── AppContainer.swift         # DI 컨테이너
-│   │   ├── LAOAppDelegate.swift       # App delegate
-│   │   ├── DesignDocumentWindowCoordinator.swift  # 디자인 문서 창 라이프사이클
-│   │   ├── ProjectWindowRoute.swift   # 창 라우팅
-│   │   ├── LAOWindowLayoutMode.swift  # 창 크기
-│   │   └── DemoSeedMode.swift         # 데모/시드 데이터
-│   ├── Features/
-│   │   ├── Design/                    # 디자인 워크플로우 (메인 기능)
-│   │   │   ├── DesignModels.swift             # 데이터 모델, enum
-│   │   │   ├── DesignPromptBuilder.swift      # LLM 프롬프트 템플릿
-│   │   │   ├── DesignWorkflowViewModel.swift  # 상태 관리, 실행 엔진
-│   │   │   ├── DesignWorkflowView.swift       # 메인 UI (phase별 화면)
-│   │   │   ├── ActiveWorkflowCoordinator.swift # 백그라운드 라이프사이클, 프로젝트 큐
-│   │   │   └── ...                            # 오버레이, 컨버터, 밸리데이터
-│   │   ├── IdeaBoard/                 # 아이디어 관리 허브
-│   │   │   ├── IdeaBoardView.swift
-│   │   │   ├── IdeaDetailView.swift
-│   │   │   ├── IdeaPromptBuilder.swift
-│   │   │   └── IdeaBoardModels.swift
-│   │   ├── Launcher/                  # 프로젝트 런처 및 워크스페이스
-│   │   ├── ProjectDashboard/          # 프로젝트 설정 (General, Agents, Skills)
-│   │   └── SharedUI/                  # 테마, 컴포넌트, 버튼 스타일
-│   └── ViewModels/                    # 공용 ViewModel
-├── Packages/
-│   ├── LAODomain/       # 도메인 모델, enum, 프로토콜
-│   ├── LAOServices/     # 서비스 프로토콜 정의
-│   ├── LAOPersistence/  # SQLite CRUD, 스키마 부트스트랩
-│   ├── LAORuntime/      # CLI 에이전트 실행, git, 모델 카탈로그
-│   ├── LAOProviders/    # 프로바이더 레지스트리
-│   └── LAOMCPServer/    # MCP 서버 실행 파일
+├── cli/                 # Express 백엔드 서버 및 CLI AI 실행부
+│   ├── src/
+│   │   ├── agents/      # 오케스트레이터 및 프롬프트 빌더
+│   │   ├── compiler.ts  # 명세서 마크다운 컴파일러
+│   │   ├── gemini.ts    # spawn 셸 프로세스 실행기
+│   │   ├── index.ts     # Express 엔드포인트 및 SSE 스트림
+│   │   └── storage.ts   # .lao 로컬 저장소 및 설정 관리
+│   └── package.json
+└── web/                 # React Flow 캔버스 UI
+    ├── src/
+    │   ├── App.tsx      # 메인 캔버스 및 제어 페이지
+    │   └── components/  # 온보딩, 디테일 패널, 설정 모달 등
+    └── package.json
 ```
-
-### 핵심 패턴
-
-- **멀티윈도우 아키텍처**: Scene API 기반 창 (Launcher, ProjectWorkspace, Settings, DesignDocument)
-- **ActiveWorkflowCoordinator**: 백그라운드 디자인 실행, 프로젝트 단위 큐잉, ViewModel 라이프사이클을 관리하는 싱글톤
-- **DesignPromptBuilder**: 모든 LLM 인터랙션의 프롬프트 구성을 중앙화
-- **AppContainer**: 모든 서비스를 보유한 의존성 주입 컨테이너
 
 ---
 
-## 빌드 & 실행
+## 시작 가이드 (Quick Start)
 
 ### 필수 조건
-- macOS 15.0+ (Sequoia)
-- Xcode 16.0+
-- XcodeGen (`brew install xcodegen`)
+* **Node.js** v18.0.0 이상
+* **npm** v9.0.0 이상
+* 로컬 머신에 로그인 및 설정된 AI CLI 도구:
+  * **Gemini CLI**: `gemini`
+  * **Claude CLI**: `claude` (Claude Engineer)
+  * **Codex CLI**: `codex`
 
-### 설정
-1. Xcode 프로젝트 생성:
+### 설치 및 구동 방법
+
+1. **패키지 의존성 설치**:
    ```bash
-   xcodegen generate
-   ```
-2. Xcode에서 `LAO.xcodeproj` 열기
-3. `LAO` 스킴 선택 후 실행
+   # CLI 백엔드 의존성 설치
+   cd cli
+   npm install
 
-### CLI 빌드
-```bash
-xcodebuild -project LAO.xcodeproj -scheme LAO -destination 'platform=macOS' build
+   # Web UI 의존성 설치
+   cd ../web
+   npm install
+   ```
+
+2. **프로젝트 빌드**:
+   ```bash
+   # Web UI 정적 파일 컴파일
+   cd ../web
+   npm run build
+
+   # CLI 백엔드 컴파일
+   cd ../cli
+   npm run build
+   ```
+
+3. **애플리케이션 실행**:
+   ```bash
+   cd ../cli
+   npm start
+   ```
+   * 서버가 `http://localhost:4000` 포트로 실행됩니다.
+   * macOS의 경우 자동으로 웹 브라우저 창이 실행되어 화면이 뜹니다.
+
+---
+
+## 환경 변수 설정
+
+`cli` 디렉터리 하위에 `.env` 파일을 생성하여 기본 프로바이더를 수동 제어할 수 있습니다:
+```env
+LAO_PROVIDER=gemini       # 사용할 CLI 도구 지정 (gemini | claude | codex)
+LAO_MODEL=                # (선택) 특정 모델로 실행 오버라이드
 ```
 
-### AI 프로바이더 설정
-Settings → Agents 에서 최소 하나의 CLI 에이전트 프로바이더를 설정한다:
-- **Claude**: `claude` CLI가 PATH에 있어야 함
-- **Codex**: `codex` CLI가 PATH에 있어야 함
-- **Gemini**: `gemini` CLI가 PATH에 있어야 함
-
 ---
-
-## 데이터 저장소
-
-- SQLite 데이터베이스: `~/Library/Application Support/LAO/`
-- 디자인 문서: 요청별로 `{project_root}/.lao/{ideaId}/{requestId}/`에 저장
-
----
-
-## 문서
-
-- [LAO가 해결하는 문제](docs/why-lao.ko.md) — LAO가 만들어진 이유
-- [운영 원칙](docs/operating-principles.ko.md) — 워크플로우 phase, 역할, 산출물 구조
-- [설계 원칙](docs/design-principles.ko.md) — 디자인 품질 기준
-- [핸드오프 메커니즘](docs/handoff.ko.md) — 완료된 설계서가 Claude Code / Codex에 어떻게 전달되는지 (export 산출물, `.mcp.json`, MCP 서버 표면)
-
-## 기여
-
-버그 리포트와 기능 요청은 [GitHub Issues](../../issues)로 환영합니다.
-자세한 내용은 [CONTRIBUTING.md](CONTRIBUTING.md) 참고. 현재 Pull Request는 받지 않습니다.
-
-## 보안
-
-보안 취약점은 [SECURITY.md](SECURITY.md)에 기술된 절차를 따라 주세요 — public issue로 올리지 마세요.
 
 ## 라이선스
 
-MIT 라이선스로 배포됩니다. 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
+이 프로젝트는 MIT 라이선스에 따라 라이선스가 부여됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하십시오.
