@@ -89,6 +89,35 @@ yarn start
 * The backend will launch at `http://localhost:4000`.
 * On macOS, it will automatically open the Web UI in your default browser.
 
+### Direct / Global Installation (Remote Git)
+
+You can also install LAO globally as a CLI tool or add it as a remote dependency in another project directly from GitHub.
+
+#### 1. Global Installation
+When installed globally, you can run the `lao` command in any directory on your system to start the workspace.
+
+* **Using npm**:
+  ```bash
+  npm install -g naka98/LAO
+  ```
+* **Using Yarn**:
+  ```bash
+  yarn global add https://github.com/naka98/LAO.git
+  ```
+
+#### 2. Installing as a Dependency
+You can add LAO as a dependency in another package to integrate its CLI core.
+
+* **Using npm**:
+  ```bash
+  npm install naka98/LAO
+  ```
+* **Using Yarn**:
+  ```bash
+  yarn add https://github.com/naka98/LAO.git
+  ```
+  *(Note: The build pipeline will automatically compile both the CLI and Web UI assets inside your node_modules.)*
+
 ---
 
 ## Environmental Configurations

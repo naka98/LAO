@@ -89,6 +89,35 @@ yarn start
 * 백엔드 서버가 `http://localhost:4000` 포트로 실행됩니다.
 * macOS의 경우 자동으로 웹 브라우저 창이 실행되어 화면이 뜹니다.
 
+### 원격 Git 직접 / 전역 설치 (Remote Git Installation)
+
+LAO를 시스템 전역 CLI 도구로 설치하거나, 다른 프로젝트의 원격 의존성 패키지로 직접 추가할 수 있습니다.
+
+#### 1. 전역(Global) 설치
+전역으로 설치하면 어느 디렉터리에서나 `lao` 명령어를 실행하여 바로 워크스페이스를 시작할 수 있습니다.
+
+* **npm 사용 시**:
+  ```bash
+  npm install -g naka98/LAO
+  ```
+* **Yarn 사용 시**:
+  ```bash
+  yarn global add https://github.com/naka98/LAO.git
+  ```
+
+#### 2. 프로젝트 의존성 패키지로 설치
+다른 프로젝트의 `package.json`에 LAO를 의존성으로 추가해 사용할 수 있습니다.
+
+* **npm 사용 시**:
+  ```bash
+  npm install naka98/LAO
+  ```
+* **Yarn 사용 시**:
+  ```bash
+  yarn add https://github.com/naka98/LAO.git
+  ```
+  *(참고: 의존성 추가 시, 라이프사이클 빌드 파이프라인이 작동하여 node_modules 내부의 CLI 및 Web UI 에셋을 자동으로 설치하고 빌드합니다.)*
+
 ---
 
 ## 환경 변수 설정
