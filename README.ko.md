@@ -66,35 +66,28 @@ LAO/
 
 ### 설치 및 구동 방법
 
-1. **패키지 의존성 설치**:
-   ```bash
-   # CLI 백엔드 의존성 설치
-   cd cli
-   npm install
+프로젝트 루트 디렉터리에서 단 한 번의 명령어로 의존성 설치 및 CLI 백엔드와 Web UI 컴파일을 자동으로 진행할 수 있습니다.
 
-   # Web UI 의존성 설치
-   cd ../web
-   npm install
-   ```
+#### 방법 A: npm 사용 시
+```bash
+# 전체 프로젝트 의존성 설치 및 자동 빌드 수행
+npm install
 
-2. **프로젝트 빌드**:
-   ```bash
-   # Web UI 정적 파일 컴파일
-   cd ../web
-   npm run build
+# 애플리케이션 시작
+npm start
+```
 
-   # CLI 백엔드 컴파일
-   cd ../cli
-   npm run build
-   ```
+#### 방법 B: Yarn 사용 시
+```bash
+# 전체 프로젝트 의존성 설치 및 자동 빌드 수행
+yarn install
 
-3. **애플리케이션 실행**:
-   ```bash
-   cd ../cli
-   npm start
-   ```
-   * 서버가 `http://localhost:4000` 포트로 실행됩니다.
-   * macOS의 경우 자동으로 웹 브라우저 창이 실행되어 화면이 뜹니다.
+# 애플리케이션 시작
+yarn start
+```
+
+* 백엔드 서버가 `http://localhost:4000` 포트로 실행됩니다.
+* macOS의 경우 자동으로 웹 브라우저 창이 실행되어 화면이 뜹니다.
 
 ---
 

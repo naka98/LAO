@@ -66,35 +66,28 @@ LAO/
 
 ### Setup & Launch
 
-1. **Install dependencies**:
-   ```bash
-   # Install CLI backend dependencies
-   cd cli
-   npm install
+You can set up, install, and compile the entire workspace (both the CLI backend and Web UI) with a single command from the project root.
 
-   # Install Web UI dependencies
-   cd ../web
-   npm install
-   ```
+#### Option A: Using npm
+```bash
+# Install dependencies and build the workspace automatically
+npm install
 
-2. **Build projects**:
-   ```bash
-   # Compile Web UI static files
-   cd ../web
-   npm run build
+# Start the application
+npm start
+```
 
-   # Compile CLI backend
-   cd ../cli
-   npm run build
-   ```
+#### Option B: Using Yarn
+```bash
+# Install dependencies and build the workspace automatically
+yarn install
 
-3. **Start the application**:
-   ```bash
-   cd ../cli
-   npm start
-   ```
-   * The backend will launch at `http://localhost:4000`.
-   * On macOS, it will automatically open the Web UI in your default browser.
+# Start the application
+yarn start
+```
+
+* The backend will launch at `http://localhost:4000`.
+* On macOS, it will automatically open the Web UI in your default browser.
 
 ---
 
