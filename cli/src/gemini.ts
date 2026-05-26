@@ -116,12 +116,13 @@ export class GeminiClient {
     let model = params.model || this.defaultModel;
     const jsonMode = !!params.jsonMode;
 
-    // Load settings dynamically from settings.json if it exists
-    const settingsPath = path.join(process.cwd(), '.lao', 'settings.json');
-    if (fs.existsSync(settingsPath)) {
+    // Load settings dynamically from lao.config.json if it exists
+    const configPath = path.join(process.cwd(), '.lao', 'lao.config.json');
+    if (fs.existsSync(configPath)) {
       try {
-        const raw = fs.readFileSync(settingsPath, 'utf8');
-        const settings = JSON.parse(raw);
+        const raw = fs.readFileSync(configPath, 'utf8');
+        const config = JSON.parse(raw);
+        const settings = config.settings || {};
         
         let targetProvider = settings.provider;
         let targetModel = settings.model;
@@ -139,7 +140,7 @@ export class GeminiClient {
           model = params.model || targetModel;
         }
       } catch (e) {
-        console.warn('[LAO Core] Failed to parse settings.json, falling back to process.env defaults', e);
+        console.warn('[LAO Core] Failed to parse lao.config.json, falling back to process.env defaults', e);
       }
     }
 
@@ -220,6 +221,9 @@ export class GeminiClient {
         if (model && !baseCmd.includes('--model')) {
           baseCmd += ` --model "${model}"`;
         }
+        if (jsonMode && !baseCmd.includes('--output-format')) {
+          baseCmd += ' --output-format json';
+        }
         if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
           baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
         } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
@@ -236,9 +240,12 @@ export class GeminiClient {
         if (model && !baseCmd.includes('--model')) {
           baseCmd += ` --model "${model}"`;
         }
+        if (jsonMode && !baseCmd.includes('--output-format')) {
+          baseCmd += ' --output-format json';
+        }
         const hasPromptArg = baseCmd.includes('--prompt') || baseCmd.includes(' -p ') || baseCmd.includes('$LAO_PROMPT_FILE');
         if (!hasPromptArg && baseCmd.includes('gemini')) {
-          baseCmd = 'cat "$LAO_PROMPT_FILE" | ' + baseCmd;
+          baseCmd += ' -p "$(cat "$LAO_PROMPT_FILE")"';
         } else {
           baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
         }
@@ -327,21 +334,45 @@ export class GeminiClient {
 
       let output = stdout.trim();
 
-      // 6. Handle schema response extraction for Claude CLI
-      if (jsonMode && provider === 'claude') {
-        try {
-          const parsed = JSON.parse(output);
-          if (parsed.structured_output) {
-            if (typeof parsed.structured_output === 'string') {
-              output = parsed.structured_output;
-            } else {
-              output = JSON.stringify(parsed.structured_output);
+      // 6. Handle schema response extraction for Claude/Gemini CLIs
+      if (jsonMode) {
+        if (provider === 'claude') {
+          try {
+            const parsed = JSON.parse(output);
+            if (parsed.structured_output) {
+              if (typeof parsed.structured_output === 'string') {
+                output = parsed.structured_output;
+              } else {
+                output = JSON.stringify(parsed.structured_output);
+              }
+            } else if (parsed.result) {
+              output = parsed.result;
             }
-          } else if (parsed.result) {
-            output = parsed.result;
+          } catch (e) {
+            // stdout was not valid JSON or structured output format wasn't JSON. Return output as is.
           }
-        } catch (e) {
-          // stdout was not valid JSON or structured output format wasn't JSON. Return output as is.
+        } else if (provider === 'gemini' || provider === 'agy') {
+          try {
+            const firstBrace = output.indexOf('{');
+            if (firstBrace !== -1) {
+              const jsonBody = output.substring(firstBrace);
+              const parsed = JSON.parse(jsonBody);
+              if (parsed.response) {
+                if (typeof parsed.response === 'string') {
+                  try {
+                    const innerJson = JSON.parse(parsed.response);
+                    output = JSON.stringify(innerJson);
+                  } catch (e) {
+                    output = parsed.response;
+                  }
+                } else {
+                  output = JSON.stringify(parsed.response);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('[LAO Core] Failed to parse gemini CLI JSON response:', e);
+          }
         }
       }
 

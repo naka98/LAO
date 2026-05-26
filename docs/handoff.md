@@ -13,8 +13,8 @@ This document describes how design specifications generated in LAO are handed of
 In LAO 0.9, the legacy Swift-based MCP server (`LAOMCPServer`) and native macOS `.command` file launchers have been retired. They are replaced by a **highly portable, simplified Markdown-based compilation model**.
 
 The handoff workflow operates as follows:
-1. **Compilation** — The user's visual mindmap decisions are compiled by the backend Express server into a unified Markdown specification document (`spec_compiled.md`) in the `{project_root}/.lao/` folder.
-2. **Review & Extraction** — The Web UI provides a dedicated **Spec** tab containing:
+1. **Compilation** — The user's modular specifications (written as markdown documents in `.lao/specs/`) and resolved architectural decisions are compiled by the backend Express server into a unified Markdown specification document (`spec_compiled.md`) in the `{project_root}/.lao/` folder.
+2. **Review & Extraction** — The Web UI provides a dedicated **Live Compiled Spec** tab containing:
    * **Monospace Log Viewer**: Real-time rendering of the compiled specification.
    * **Copy**: Copy the complete specification to your clipboard.
    * **Download**: Save `spec_compiled.md` locally to your machine.
@@ -25,12 +25,12 @@ The handoff workflow operates as follows:
 ## 2. Specification Compilation
 
 * **Output Location**: `{project_root}/.lao/spec_compiled.md`
-* **Trigger Endpoint**: `POST /api/compile` (triggered automatically when entering the **Spec** tab in the Web UI).
+* **Trigger Endpoint**: `POST /api/specs/compile` (triggered automatically when updates occur in the Web UI or a compile request is sent).
 
-The compilation engine gathers all mainline decided nodes (filtering out candidate/archived alternatives) and constructs a structured Markdown document containing:
-* Core project goals & idea details.
-* Detailed system requirements, screens, data models, and API specifications.
-* Decision rationale logs for each node adoption.
+The compilation engine gathers the `core_spec.md` and all active feature specification files in `.lao/specs/features/` and constructs a structured Markdown document containing:
+* Core project goals, tech stacks, and Golden Rules.
+* Detailed system requirements, user flows, and component specs.
+* Decision rationale logs for each resolved decision card.
 
 ---
 
