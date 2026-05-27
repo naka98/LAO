@@ -154,3 +154,32 @@ body,
   overflow-x: auto;
 }
 
+/* Markdown Table Layout */
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  overflow-x: auto;
+  display: block;
+}
+
+.markdown-content th,
+.markdown-content td {
+  border: 1px solid #1e293b;
+  padding: 0.625rem 0.875rem;
+  text-align: left;
+}
+
+.markdown-content th {
+  background-color: rgba(139, 92, 246, 0.05);
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.markdown-content tr:nth-child(even) {
+  background-color: rgba(30, 41, 59, 0.2);
+}
+
+

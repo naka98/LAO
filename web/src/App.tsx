@@ -1232,7 +1232,7 @@ export default function App() {
       {/* Main split-screen panel */}
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
         {/* Left Side: Wizard / Decision Cards deck & Chat */}
-        <div className="w-full md:w-2/5 flex-none md:flex-initial border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-visible md:overflow-y-auto min-h-[450px] md:min-h-0">
+        <div className="w-full md:w-2/5 flex-none md:flex-none border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-visible md:overflow-y-auto min-h-[450px] md:min-h-0">
           {/* 1. Decision Card Section */}
           {config.phase === 'development' ? (
             /* Implementation Checklist Panel */
@@ -1411,7 +1411,7 @@ export default function App() {
         </div>
 
         {/* Right Side: Document Tabs Workspace */}
-        <div className="w-full md:w-auto flex-none md:flex-1 flex flex-col bg-slate-950 min-h-[550px] md:min-h-0">
+        <div className="w-full md:w-auto flex-none md:flex-1 md:min-w-0 flex flex-col bg-slate-950 min-h-[550px] md:min-h-0">
           {/* Tab buttons */}
           <div className="bg-slate-950/40 border-b border-slate-900 px-6 py-2 flex items-center justify-between">
             <div className="flex gap-4">
@@ -1453,7 +1453,7 @@ export default function App() {
           </div>
 
           {/* Tab Contents */}
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto p-6">
+          <div className="flex-1 overflow-x-auto overflow-y-visible md:overflow-y-auto p-6">
             
             {/* A. Live Compiled Spec Viewer */}
             {activeTab === 'spec' && (
