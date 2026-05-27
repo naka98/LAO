@@ -1325,6 +1325,13 @@ export default function App() {
                       className="text-xs text-slate-350 leading-relaxed select-text markdown-content"
                       dangerouslySetInnerHTML={renderMarkdown(gapReview)}
                     />
+                  ) : isAuditing ? (
+                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                      <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                      <span className="text-xs text-slate-400 font-medium">
+                        {lang === 'ko' ? '기획서 무결성 및 모순 감사 진행 중...' : 'Auditing specifications for gaps & contradictions...'}
+                      </span>
+                    </div>
                   ) : (
                     <div className="text-xs text-slate-600 italic">
                       {t.gapReportDesc}
