@@ -77,7 +77,7 @@ export class StorageManager {
         },
         developerLoop: {
           buildCommand: 'npm run build',
-          launchCommand: 'npm start',
+          launchCommand: 'npx -y http-server web/dist -p 3000',
           verifyCommand: 'npm test',
           uiCheckCommand: '',
         }

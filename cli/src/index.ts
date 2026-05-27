@@ -430,7 +430,7 @@ app.get('/api/devloop/run', async (req, res) => {
     const config = storage.readConfig();
     const devLoop = config.developerLoop || {
       buildCommand: 'npm run build',
-      launchCommand: 'npm start',
+      launchCommand: 'npx -y http-server web/dist -p 3000',
       verifyCommand: 'npm test',
       uiCheckCommand: ''
     };
