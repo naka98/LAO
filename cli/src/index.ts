@@ -336,6 +336,19 @@ app.get('/api/project/gap-check', async (req, res) => {
   }
 });
 
+// 13.5. Serve design mockup HTML for preview during planning phase
+app.get('/api/project/mockup', (req, res) => {
+  try {
+    const mockupPath = path.join(PROJECT_ROOT, '.lao', 'mockup.html');
+    if (!fs.existsSync(mockupPath)) {
+      return res.status(404).send('Mockup file not found at .lao/mockup.html. Please ensure it is generated.');
+    }
+    res.sendFile(mockupPath, { dotfiles: 'allow' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 14. Chat SSE streaming responder
 app.get('/api/chat/stream', async (req, res) => {
   try {

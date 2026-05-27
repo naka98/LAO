@@ -1589,23 +1589,31 @@ export default function App() {
             )}
 
             {/* E. Live App Preview Tab */}
-            {activeTab === 'preview' && config?.phase === 'development' && (
-              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
+            {activeTab === 'preview' && (
+              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl animate-fade-in">
                 {/* URL Bar */}
-                <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2 items-center">
-                  <Globe className="w-4 h-4 text-violet-400 shrink-0" />
-                  <input
-                    type="text"
-                    value={previewUrl}
-                    onChange={e => setPreviewUrl(e.target.value)}
-                    placeholder={t.previewUrlPlaceholder}
-                    className="flex-1 bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500 font-mono"
-                  />
+                <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2 items-center justify-between">
+                  <div className="flex items-center gap-2 flex-1">
+                    <Globe className="w-4 h-4 text-violet-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={config?.phase === 'planning' ? '/api/project/mockup' : previewUrl}
+                      onChange={e => setPreviewUrl(e.target.value)}
+                      disabled={config?.phase === 'planning'}
+                      placeholder={t.previewUrlPlaceholder}
+                      className="flex-1 max-w-md bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500 font-mono disabled:opacity-75"
+                    />
+                  </div>
+                  {config?.phase === 'planning' && (
+                    <span className="text-[10px] bg-violet-500/10 border border-violet-500/20 text-violet-400 font-extrabold px-2.5 py-1 rounded-xl shrink-0 animate-pulse">
+                      {lang === 'ko' ? '기획 시안 프로토타입' : 'Design Prototype'}
+                    </span>
+                  )}
                 </div>
                 {/* Webpage Viewer Frame */}
                 <div className="flex-1 bg-white relative min-h-[400px]">
                   <iframe
-                    src={previewUrl}
+                    src={config?.phase === 'planning' ? '/api/project/mockup' : previewUrl}
                     title="App Preview"
                     className="w-full h-full border-none bg-white"
                     sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
@@ -1614,8 +1622,8 @@ export default function App() {
               </div>
             )}
 
-            {/* Locked State for DevLoop & Preview during Planning Phase */}
-            {config?.phase === 'planning' && (activeTab === 'devloop' || activeTab === 'preview') && (
+            {/* Locked State for DevLoop during Planning Phase */}
+            {config?.phase === 'planning' && activeTab === 'devloop' && (
               <div className="h-[450px] md:h-full flex flex-col items-center justify-center max-w-4xl mx-auto border border-slate-900 bg-slate-950/40 rounded-2xl p-8 text-center relative overflow-hidden shadow-2xl">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.05),rgba(255,255,255,0))]" />
                 <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl mb-4 relative">
@@ -1626,8 +1634,8 @@ export default function App() {
                 </h3>
                 <p className="text-xs text-slate-400 max-w-md leading-relaxed">
                   {lang === 'ko'
-                    ? '현재는 기획 설계 단계(PLANNING)입니다. 상단의 [개발 단계 전환(기획 잠금)] 버튼을 클릭하여 기획을 확정하고 개발 모드로 전환한 뒤에 코드를 빌드하고 실시간 앱 미리보기를 실행해 보세요.'
-                    : 'These engineering tools are locked during the Planning Phase. Click the "Start Development (Lock Spec)" button at the top header to finalize your specifications and unlock local building, testing, and app preview.'}
+                    ? '현재는 기획 설계 단계(PLANNING)입니다. 상단의 [개발 단계 전환(기획 잠금)] 버튼을 클릭하여 기획을 확정하고 개발 모드로 전환한 뒤에 코드를 빌드하고 개발 콘솔을 제어해 보세요.'
+                    : 'These engineering tools are locked during the Planning Phase. Click the "Start Development (Lock Spec)" button at the top header to finalize your specifications and unlock local building, testing, and development command control.'}
                 </p>
               </div>
             )}
