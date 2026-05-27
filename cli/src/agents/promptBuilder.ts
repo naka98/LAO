@@ -52,16 +52,16 @@ ${params.userMessage}
 You are the **Specifier**. Your job is to translate the following rough idea into a structured draft specification (both the Core Spec and 2 to 4 primary feature sections) under the strict constraints of the Golden Rules.
 
 ## Project Title
-\${params.projectName}
+${params.projectName}
 
 ## Rough Idea
-\${params.projectDesc}
+${params.projectDesc}
 
 ## Golden Rules (Constraints)
-- Frontend: \${params.goldenRules.frontend}
-- Backend: \${params.goldenRules.backend}
-- Database: \${params.goldenRules.database}
-- Additional: \${params.goldenRules.additional}
+- Frontend: ${params.goldenRules.frontend}
+- Backend: ${params.goldenRules.backend}
+- Database: ${params.goldenRules.database}
+- Additional: ${params.goldenRules.additional}
 
 ## Required Sections & Formatting Rules:
 1. **Core Spec (\`coreSpec\`)\**:
@@ -195,7 +195,7 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     const specsBlock = params.sections.map(s => `### ${s.title}\n${s.content}`).join('\n\n');
 
     return `
-\${roleDescription}
+${roleDescription}
 
 Analyze the project specs and user messages. Conform to the Golden Rules.
 Respond with:
@@ -214,15 +214,15 @@ Respond with:
 - **Feature content**: MUST contain \`## User Story\` (using the \`As a... I want to... So that...\` template) and \`## Acceptance Criteria\` (using the Given/When/Then layout) sections.
 
 ## Golden Rules
-- Frontend: \${params.config.goldenRules.frontend}
-- Backend: \${params.config.goldenRules.backend}
-- Database: \${params.config.goldenRules.database}
-- Constraints: \${params.config.goldenRules.additional}
+- Frontend: ${params.config.goldenRules.frontend}
+- Backend: ${params.config.goldenRules.backend}
+- Database: ${params.config.goldenRules.database}
+- Constraints: ${params.config.goldenRules.additional}
 
 ## Current Specifications
-\${specsBlock}
+${specsBlock}
 
-\${historyBlock}
+${historyBlock}
 `;
   }
 

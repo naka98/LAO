@@ -373,7 +373,7 @@ export class GeminiClient {
 
       // 6. Handle schema response extraction for Claude/Gemini CLIs
       if (jsonMode) {
-        if (provider === 'claude') {
+        if (provider === 'claude' || provider === 'cursor') {
           try {
             const parsed = JSON.parse(output);
             if (parsed.structured_output) {

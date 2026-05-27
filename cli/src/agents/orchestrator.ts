@@ -25,33 +25,31 @@ export class AgentOrchestrator {
    * Helper to clean markdown JSON fences before parsing
    */
   private cleanJsonResponse(raw: string): string {
-    const cleaned = raw.trim();
+    let cleaned = raw.trim();
     
-    // 1. Find ```json block
+    // 1. Strip outermost ```json and matching trailing ```
     const jsonMarker = '```json';
     const jsonIndex = cleaned.indexOf(jsonMarker);
     if (jsonIndex !== -1) {
-      const start = jsonIndex + jsonMarker.length;
-      const end = cleaned.indexOf('```', start);
-      if (end !== -1) {
-        return cleaned.substring(start, end).trim();
+      cleaned = cleaned.substring(jsonIndex + jsonMarker.length).trim();
+      const lastFence = cleaned.lastIndexOf('```');
+      if (lastFence !== -1) {
+        cleaned = cleaned.substring(0, lastFence).trim();
       }
-      return cleaned.substring(start).trim();
-    }
-
-    // 2. Find generic ``` block
-    const genericMarker = '```';
-    const genericIndex = cleaned.indexOf(genericMarker);
-    if (genericIndex !== -1) {
-      const start = genericIndex + genericMarker.length;
-      const end = cleaned.indexOf('```', start);
-      if (end !== -1) {
-        return cleaned.substring(start, end).trim();
+    } else {
+      // 2. Strip generic ``` blocks
+      const genericMarker = '```';
+      const genericIndex = cleaned.indexOf(genericMarker);
+      if (genericIndex !== -1) {
+        cleaned = cleaned.substring(genericIndex + genericMarker.length).trim();
+        const lastFence = cleaned.lastIndexOf('```');
+        if (lastFence !== -1) {
+          cleaned = cleaned.substring(0, lastFence).trim();
+        }
       }
-      return cleaned.substring(start).trim();
     }
     
-    // 3. Fallback to outer brackets/braces
+    // 3. Fallback to extracting everything within the first and last brace/bracket
     const firstBrace = cleaned.indexOf('{');
     const firstBracket = cleaned.indexOf('[');
     if (firstBrace !== -1 || firstBracket !== -1) {
