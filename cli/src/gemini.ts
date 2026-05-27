@@ -243,6 +243,31 @@ export class GeminiClient {
         }
         command = baseCmd;
 
+      } else if (provider === 'cursor') {
+        let baseCmd = process.env.LAO_PROVIDER_CURSOR_CLI || 'cursor agent';
+        if (!baseCmd.includes('--yolo') && !baseCmd.includes('-f') && baseCmd.includes('cursor')) {
+          if (baseCmd.includes('agent')) {
+            baseCmd = baseCmd.replace(/\bcursor agent\b/, 'cursor agent --yolo');
+          } else {
+            baseCmd = baseCmd.replace(/\bcursor\b/, 'cursor agent --yolo');
+          }
+        }
+        if (!baseCmd.includes('--print') && !baseCmd.includes('-p')) {
+          baseCmd += ' --print';
+        }
+        if (model && !baseCmd.includes('--model')) {
+          baseCmd += ` --model "${model}"`;
+        }
+        if (jsonMode && !baseCmd.includes('--output-format')) {
+          baseCmd += ' --output-format json';
+        }
+        if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
+          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
+        } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
+          baseCmd += ' "$(cat "$LAO_PROMPT_FILE")"';
+        }
+        command = baseCmd;
+
       } else {
         // default: gemini
         let baseCmd = process.env.LAO_PROVIDER_GEMINI_CLI || 'gemini';

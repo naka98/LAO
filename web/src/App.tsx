@@ -1421,6 +1421,7 @@ export default function App() {
                       <option value="claude">Claude CLI</option>
                       <option value="codex">Codex CLI</option>
                       <option value="agy">Antigravity CLI (agy)</option>
+                      <option value="cursor">Cursor Agent CLI (cursor)</option>
                     </select>
                   </div>
 
@@ -1516,6 +1517,7 @@ export default function App() {
                             <option value="claude">Claude</option>
                             <option value="codex">Codex</option>
                             <option value="agy">Antigravity (agy)</option>
+                            <option value="cursor">Cursor Agent</option>
                           </select>
                           <input
                             type="text"
