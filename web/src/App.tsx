@@ -679,8 +679,8 @@ export default function App() {
   // Render Loader screen during initialization
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start md:justify-center text-slate-100 p-6 overflow-y-auto">
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden my-auto">
+      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden my-auto shrink-0">
           <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-emerald-500/10 animate-pulse pointer-events-none" />
           <Loader2 className="w-12 h-12 text-violet-500 animate-spin mx-auto mb-6" />
           <h2 className="text-xl font-bold text-slate-200 mb-2">{t.loadingSpecs}</h2>
@@ -693,7 +693,7 @@ export default function App() {
   // Render Intake Wizard if no active project config exists
   if (!config || !config.sprouted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
         {/* Language switcher on top right */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <button
@@ -706,7 +706,7 @@ export default function App() {
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
         
-        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto">
+        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto shrink-0">
           <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 

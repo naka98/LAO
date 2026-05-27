@@ -1,4 +1,4 @@
-# LAO (Local AI Office)
+# LAO (Leeway AI Office)
 
 LAO is a platform-independent, developer-first AI design workflow application built with **Node.js (Express)** and **React (Vite)**. It transforms raw ideas into AI-ready, structured specifications by running local command-line interface (CLI) AI clients on your machine.
 
