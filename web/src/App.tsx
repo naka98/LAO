@@ -118,7 +118,11 @@ const translations = {
     toastTaskUpdated: "Task status updated.",
     previewTab: "Preview",
     errorExplanationTitle: "AI Debugging Assistant",
-    previewUrlPlaceholder: "Preview URL (e.g. http://localhost:3000)",
+    previewUrlPlaceholder: "Preview URL (e.g. http://localhost:3050)",
+    importPrdBtn: "Import PRD File (.md, .txt)",
+    toastPrdLoaded: "PRD file loaded successfully.",
+    toastPrdLoadFailed: "Failed to read PRD file.",
+    toastPrdTypeWarning: "Only text or markdown files (.md, .txt) are supported.",
   },
   ko: {
     projectNamePlaceholder: "예: 로컬 데이터베이스 웹 UI",
@@ -200,6 +204,10 @@ const translations = {
     previewTab: "미리보기",
     errorExplanationTitle: "AI 오류 분석 및 대처 가이드",
     previewUrlPlaceholder: "미리보기 URL (예: http://localhost:3000)",
+    importPrdBtn: "PRD 파일 불러오기 (.md, .txt)",
+    toastPrdLoaded: "PRD 파일을 성공적으로 불러왔습니다.",
+    toastPrdLoadFailed: "PRD 파일을 읽는데 실패했습니다.",
+    toastPrdTypeWarning: "텍스트 또는 마크다운 파일(.md, .txt)만 불러올 수 있습니다.",
   }
 };
 
@@ -370,6 +378,31 @@ export default function App() {
     } catch (e) {
       console.error('Failed to compile specs', e);
     }
+  };
+
+  // File Import handler
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isText = file.name.endsWith('.md') || file.name.endsWith('.txt') || file.type.startsWith('text/');
+    if (!isText) {
+      showToast(t.toastPrdTypeWarning, 'warning');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        setIntakeDesc(text);
+        showToast(t.toastPrdLoaded, 'success');
+      }
+    };
+    reader.onerror = () => {
+      showToast(t.toastPrdLoadFailed, 'error');
+    };
+    reader.readAsText(file);
   };
 
   // 2. Intake Sprouting
@@ -1003,7 +1036,25 @@ export default function App() {
 
             {/* Rough Idea */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.roughIdeaLabel}</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">{t.roughIdeaLabel}</label>
+                <div className="flex items-center">
+                  <input
+                    type="file"
+                    id="prd-file-upload"
+                    accept=".md,.txt"
+                    className="hidden"
+                    onChange={handleFileImport}
+                  />
+                  <label
+                    htmlFor="prd-file-upload"
+                    className="cursor-pointer flex items-center gap-1 px-2.5 py-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-lg text-[9px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    <FileText className="w-3 h-3" />
+                    {t.importPrdBtn}
+                  </label>
+                </div>
+              </div>
               <textarea
                 id="project-desc-input"
                 placeholder={t.roughIdeaPlaceholder}
