@@ -316,6 +316,18 @@ export default function App() {
         setConfig(configData);
         setFormConfig(configData);
         
+        // Sync intake wizard settings
+        if (configData.settings) {
+          if (configData.settings.provider) setIntakeProvider(configData.settings.provider);
+          if (configData.settings.model !== undefined) setIntakeModel(configData.settings.model);
+        }
+        if (configData.goldenRules) {
+          setIntakeGoldenRules(configData.goldenRules);
+        }
+        if (configData.automationLevel) {
+          setIntakeLevel(configData.automationLevel);
+        }
+        
         if (configData.projectName) {
           // Fetch specs, decisions, criteria, messages, tasks
           const [resSpecs, resDecs, resCriteria, resMessages, resTasks] = await Promise.all([
@@ -680,6 +692,246 @@ export default function App() {
     }
   };
 
+  // Render Settings Modal Helper
+  const renderSettingsModal = () => {
+    if (!showSettings || !formConfig) return null;
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+        <form onSubmit={saveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl relative my-auto text-xs">
+          <button
+            type="button"
+            onClick={() => setShowSettings(false)}
+            className="absolute top-4 right-4 p-1.5 bg-slate-950 border border-slate-855 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Modal Heading */}
+          <div className="flex items-center gap-2.5 mb-5">
+            <Settings className="w-5 h-5 text-violet-400" />
+            <h2 className="text-base font-bold text-slate-100">{t.projectConfigTitle}</h2>
+          </div>
+
+          {/* Tab selection */}
+          <div className="flex gap-2 border-b border-slate-850 mb-4 text-xs font-semibold">
+            {[
+              { id: 'global', label: t.globalPresetsTab },
+              { id: 'agents', label: t.agentConfigTab },
+              { id: 'devloop', label: t.devloopCommandsTab }
+            ].map(tabOpt => (
+              <button
+                key={tabOpt.id}
+                type="button"
+                onClick={() => setSettingsTab(tabOpt.id as any)}
+                className={`pb-2 px-1 border-b-2 transition-all ${
+                  settingsTab === tabOpt.id
+                    ? 'border-violet-500 text-slate-200'
+                    : 'border-transparent text-slate-500 hover:text-slate-350'
+                }`}
+              >
+                {tabOpt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+            {/* Tab Content: Global Settings */}
+            {settingsTab === 'global' && (
+              <div className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.globalProviderLabel}</label>
+                  <select
+                    value={formConfig.settings.provider}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      settings: { ...prev!.settings, provider: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="gemini">Gemini CLI</option>
+                    <option value="claude">Claude CLI</option>
+                    <option value="codex">Codex CLI</option>
+                    <option value="agy">Antigravity CLI (agy)</option>
+                    <option value="cursor">Cursor Agent CLI (cursor)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.modelOverrideLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.settings.model}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      settings: { ...prev!.settings, model: e.target.value }
+                    }))}
+                    placeholder="e.g. gemini-1.5-pro"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 placeholder-slate-650 focus:outline-none"
+                  />
+                </div>
+
+                <div className="border-t border-slate-850 pt-3">
+                  <label className="block font-semibold text-slate-300 mb-2">{t.goldenRulesTitle}</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.frontendLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.frontend}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, frontend: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.backendLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.backend}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, backend: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.databaseLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.database}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, database: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.additionalLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.additional}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, additional: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab Content: Agent Customization */}
+            {settingsTab === 'agents' && (
+              <div className="space-y-3 text-xs">
+                {Object.keys(formConfig.settings.agents).map(roleKey => {
+                  const typedKey = roleKey as keyof typeof formConfig.settings.agents;
+                  return (
+                    <div key={roleKey} className="flex items-center justify-between border-b border-slate-850 pb-2.5">
+                      <span className="font-bold text-slate-300 capitalize">{roleKey} {t.agentRoleLabel}</span>
+                      <div className="flex gap-2">
+                        <select
+                          value={formConfig.settings.agents[typedKey].provider}
+                          onChange={e => setFormConfig(prev => {
+                            const agents = { ...prev!.settings.agents };
+                            agents[typedKey] = { ...agents[typedKey], provider: e.target.value };
+                            return { ...prev!, settings: { ...prev!.settings, agents } };
+                          })}
+                          className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300"
+                        >
+                          <option value="gemini">Gemini</option>
+                          <option value="claude">Claude</option>
+                          <option value="codex">Codex</option>
+                          <option value="agy">Antigravity (agy)</option>
+                          <option value="cursor">Cursor Agent</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={formConfig.settings.agents[typedKey].model}
+                          onChange={e => setFormConfig(prev => {
+                            const agents = { ...prev!.settings.agents };
+                            agents[typedKey] = { ...agents[typedKey], model: e.target.value };
+                            return { ...prev!, settings: { ...prev!.settings, agents } };
+                          })}
+                          placeholder={t.defaultModelPlaceholder}
+                          className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 w-32 placeholder-slate-650"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Tab Content: DevLoop commands */}
+            {settingsTab === 'devloop' && (
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.buildCommandLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.developerLoop.buildCommand}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      developerLoop: { ...prev!.developerLoop, buildCommand: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.verifyCommandLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.developerLoop.verifyCommand}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      developerLoop: { ...prev!.developerLoop, verifyCommand: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.launchCommandLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.developerLoop.launchCommand}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      developerLoop: { ...prev!.developerLoop, launchCommand: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 border-t border-slate-850 pt-4 mt-5 text-xs">
+            <button
+              type="button"
+              onClick={() => setShowSettings(false)}
+              className="px-4 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl font-bold text-slate-450"
+            >
+              {t.closeBtn}
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold"
+            >
+              {t.saveConfigBtn}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   // Render Loader screen during initialization
   if (isInitializing) {
     return (
@@ -698,9 +950,18 @@ export default function App() {
   if (!config || !config.sprouted) {
     return (
       <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
-        {/* Language switcher on top right */}
+        {/* Language switcher & Settings on top right */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-350 transition-colors"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            {lang === 'ko' ? '환경설정' : 'Settings'}
+          </button>
+          <button
+            type="button"
             onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-350 transition-colors"
           >
@@ -880,6 +1141,8 @@ export default function App() {
             {errorToast.message}
           </div>
         )}
+        {/* Settings Modal (Intake Wizard view) */}
+        {renderSettingsModal()}
       </div>
     );
   }
@@ -1402,241 +1665,7 @@ export default function App() {
       </main>
 
       {/* Settings Modal */}
-      {showSettings && formConfig && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
-          <form onSubmit={saveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl relative my-auto">
-            <button
-              type="button"
-              onClick={() => setShowSettings(false)}
-              className="absolute top-4 right-4 p-1.5 bg-slate-950 border border-slate-855 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {/* Modal Heading */}
-            <div className="flex items-center gap-2.5 mb-5">
-              <Settings className="w-5 h-5 text-violet-400" />
-              <h2 className="text-base font-bold text-slate-100">{t.projectConfigTitle}</h2>
-            </div>
-
-            {/* Tab selection */}
-            <div className="flex gap-2 border-b border-slate-850 mb-4 text-xs font-semibold">
-              {[
-                { id: 'global', label: t.globalPresetsTab },
-                { id: 'agents', label: t.agentConfigTab },
-                { id: 'devloop', label: t.devloopCommandsTab }
-              ].map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setSettingsTab(t.id as any)}
-                  className={`pb-2 px-1 border-b-2 transition-all ${
-                    settingsTab === t.id
-                      ? 'border-violet-500 text-slate-200'
-                      : 'border-transparent text-slate-500 hover:text-slate-350'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-              {/* Tab Content: Global Settings */}
-              {settingsTab === 'global' && (
-                <div className="space-y-3.5 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.globalProviderLabel}</label>
-                    <select
-                      value={formConfig.settings.provider}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        settings: { ...prev!.settings, provider: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-violet-500"
-                    >
-                      <option value="gemini">Gemini CLI</option>
-                      <option value="claude">Claude CLI</option>
-                      <option value="codex">Codex CLI</option>
-                      <option value="agy">Antigravity CLI (agy)</option>
-                      <option value="cursor">Cursor Agent CLI (cursor)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.modelOverrideLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.settings.model}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        settings: { ...prev!.settings, model: e.target.value }
-                      }))}
-                      placeholder="e.g. gemini-1.5-pro"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 placeholder-slate-650 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="border-t border-slate-850 pt-3">
-                    <label className="block font-semibold text-slate-300 mb-2">{t.goldenRulesTitle}</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.frontendLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.frontend}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, frontend: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.backendLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.backend}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, backend: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.databaseLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.database}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, database: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.additionalLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.additional}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, additional: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab Content: Agent Customization */}
-              {settingsTab === 'agents' && (
-                <div className="space-y-3 text-xs">
-                  {Object.keys(formConfig.settings.agents).map(roleKey => {
-                    const typedKey = roleKey as keyof typeof formConfig.settings.agents;
-                    return (
-                      <div key={roleKey} className="flex items-center justify-between border-b border-slate-850 pb-2.5">
-                        <span className="font-bold text-slate-300 capitalize">{roleKey} {t.agentRoleLabel}</span>
-                        <div className="flex gap-2">
-                          <select
-                            value={formConfig.settings.agents[typedKey].provider}
-                            onChange={e => setFormConfig(prev => {
-                              const agents = { ...prev!.settings.agents };
-                              agents[typedKey] = { ...agents[typedKey], provider: e.target.value };
-                              return { ...prev!, settings: { ...prev!.settings, agents } };
-                            })}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300"
-                          >
-                            <option value="gemini">Gemini</option>
-                            <option value="claude">Claude</option>
-                            <option value="codex">Codex</option>
-                            <option value="agy">Antigravity (agy)</option>
-                            <option value="cursor">Cursor Agent</option>
-                          </select>
-                          <input
-                            type="text"
-                            value={formConfig.settings.agents[typedKey].model}
-                            onChange={e => setFormConfig(prev => {
-                              const agents = { ...prev!.settings.agents };
-                              agents[typedKey] = { ...agents[typedKey], model: e.target.value };
-                              return { ...prev!, settings: { ...prev!.settings, agents } };
-                            })}
-                            placeholder={t.defaultModelPlaceholder}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 w-32 placeholder-slate-650"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Tab Content: DevLoop commands */}
-              {settingsTab === 'devloop' && (
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.buildCommandLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.developerLoop.buildCommand}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        developerLoop: { ...prev!.developerLoop, buildCommand: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.verifyCommandLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.developerLoop.verifyCommand}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        developerLoop: { ...prev!.developerLoop, verifyCommand: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.launchCommandLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.developerLoop.launchCommand}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        developerLoop: { ...prev!.developerLoop, launchCommand: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2 border-t border-slate-850 pt-4 mt-5 text-xs">
-              <button
-                type="button"
-                onClick={() => setShowSettings(false)}
-                className="px-4 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl font-bold text-slate-450"
-              >
-                {t.closeBtn}
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold"
-              >
-                {t.saveConfigBtn}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {renderSettingsModal()}
 
       {/* Floating Toast notification */}
       {errorToast && (
