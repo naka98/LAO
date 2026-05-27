@@ -428,6 +428,9 @@ app.get('/api/devloop/run', async (req, res) => {
     }
 
     const config = storage.readConfig();
+    if (config.phase !== 'development') {
+      return res.status(400).send('DevLoop commands are only available in the development phase');
+    }
     const devLoop = config.developerLoop || {
       buildCommand: 'npm run build',
       launchCommand: 'npx -y http-server web/dist -p 3000',

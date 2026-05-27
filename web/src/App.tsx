@@ -1202,7 +1202,7 @@ export default function App() {
             )}
 
             {/* B. DevLoop Console Tab */}
-            {activeTab === 'devloop' && (
+            {activeTab === 'devloop' && config?.phase === 'development' && (
               <div className="space-y-4 max-w-4xl mx-auto h-full flex flex-col">
                 {/* AI Error Explanation Alert Card */}
                 {devLoopExplanation && (
@@ -1271,7 +1271,7 @@ export default function App() {
             )}
 
             {/* E. Live App Preview Tab */}
-            {activeTab === 'preview' && (
+            {activeTab === 'preview' && config?.phase === 'development' && (
               <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
                 {/* URL Bar */}
                 <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2 items-center">
@@ -1293,6 +1293,24 @@ export default function App() {
                     sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                   />
                 </div>
+              </div>
+            )}
+
+            {/* Locked State for DevLoop & Preview during Planning Phase */}
+            {config?.phase === 'planning' && (activeTab === 'devloop' || activeTab === 'preview') && (
+              <div className="h-[450px] md:h-full flex flex-col items-center justify-center max-w-4xl mx-auto border border-slate-900 bg-slate-950/40 rounded-2xl p-8 text-center relative overflow-hidden shadow-2xl">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.05),rgba(255,255,255,0))]" />
+                <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl mb-4 relative">
+                  <Lock className="w-8 h-8 text-violet-400 animate-pulse" />
+                </div>
+                <h3 className="text-base font-bold text-slate-200 mb-2">
+                  {lang === 'ko' ? '개발 단계 전용 기능입니다' : 'Locked in Planning Phase'}
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md leading-relaxed">
+                  {lang === 'ko'
+                    ? '현재는 기획 설계 단계(PLANNING)입니다. 상단의 [개발 단계 전환(기획 잠금)] 버튼을 클릭하여 기획을 확정하고 개발 모드로 전환한 뒤에 코드를 빌드하고 실시간 앱 미리보기를 실행해 보세요.'
+                    : 'These engineering tools are locked during the Planning Phase. Click the "Start Development (Lock Spec)" button at the top header to finalize your specifications and unlock local building, testing, and app preview.'}
+                </p>
               </div>
             )}
 
