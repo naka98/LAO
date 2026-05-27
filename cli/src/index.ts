@@ -218,7 +218,7 @@ app.post('/api/specs/compile', (req, res) => {
 // 12. Submit Rough Idea / Intake (Autopilot Sprout)
 app.post('/api/project/intake', async (req, res) => {
   try {
-    const { projectName, projectDesc, automationLevel, goldenRules } = req.body;
+    const { projectName, projectDesc, automationLevel, goldenRules, provider, model } = req.body;
     if (!projectName || !projectDesc) {
       return res.status(400).json({ error: 'projectName and projectDesc are required' });
     }
@@ -262,6 +262,18 @@ app.post('/api/project/intake', async (req, res) => {
     config.automationLevel = automationLevel || 'supervised';
     if (goldenRules) {
       config.goldenRules = goldenRules;
+    }
+    if (provider) {
+      config.settings.provider = provider;
+      Object.keys(config.settings.agents).forEach(role => {
+        config.settings.agents[role as keyof typeof config.settings.agents].provider = provider;
+      });
+    }
+    if (model !== undefined) {
+      config.settings.model = model;
+      Object.keys(config.settings.agents).forEach(role => {
+        config.settings.agents[role as keyof typeof config.settings.agents].model = model;
+      });
     }
     config.phase = 'planning';
     storage.writeConfig(config);

@@ -245,6 +245,8 @@ export default function App() {
     database: 'SQLite',
     additional: 'RESTful API structure, zero Docker dependencies'
   });
+  const [intakeProvider, setIntakeProvider] = useState('gemini');
+  const [intakeModel, setIntakeModel] = useState('');
 
   // Settings Modal States
   const [showSettings, setShowSettings] = useState(false);
@@ -373,7 +375,9 @@ export default function App() {
           projectName: intakeProjectName,
           projectDesc: intakeDesc,
           automationLevel: intakeLevel,
-          goldenRules: intakeGoldenRules
+          goldenRules: intakeGoldenRules,
+          provider: intakeProvider,
+          model: intakeModel
         })
       });
 
@@ -791,6 +795,40 @@ export default function App() {
                     value={intakeGoldenRules.additional}
                     onChange={e => setIntakeGoldenRules(prev => ({ ...prev, additional: e.target.value }))}
                     className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* AI Engine Config */}
+            <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
+                <Brain className="w-3.5 h-3.5 text-violet-400" />
+                {lang === 'ko' ? 'AI 엔진 설정 (기본 실행 환경)' : 'AI Engine Configuration'}
+              </span>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.globalProviderLabel}</label>
+                  <select
+                    value={intakeProvider}
+                    onChange={e => setIntakeProvider(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="gemini">Gemini CLI</option>
+                    <option value="claude">Claude CLI</option>
+                    <option value="codex">Codex CLI</option>
+                    <option value="agy">Antigravity CLI (agy)</option>
+                    <option value="cursor">Cursor Agent CLI (cursor)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.modelOverrideLabel}</label>
+                  <input
+                    type="text"
+                    value={intakeModel}
+                    onChange={e => setIntakeModel(e.target.value)}
+                    placeholder="e.g. default model"
+                    className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500 placeholder-slate-700"
                   />
                 </div>
               </div>
