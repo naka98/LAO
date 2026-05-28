@@ -21,7 +21,7 @@ import {
   ListTodo,
   RotateCw
 } from 'lucide-react';
-import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules, TaskItem } from './types';
+import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules, TaskItem, IntakeProposals } from './types';
 import { marked } from 'marked';
 import mermaid from 'mermaid';
 
@@ -59,7 +59,7 @@ const translations = {
     interactiveDesc: "Proceed and notify",
     autopilotLabel: "Autopilot (Low)",
     autopilotDesc: "Full hands-off build",
-    sproutSpecsBtn: "Sprout Core Specifications",
+    sproutSpecsBtn: "Analyze Concept & Formulate Options",
     loadingSpecs: "Orchestrating AI Agents...",
     loadingSpecsDesc: "Specifier is drafting core specs, Optionizer is spawning decision forks, and Gap Detector is scanning the initial files. Please wait.",
     startDevelopment: "Start Development",
@@ -124,6 +124,24 @@ const translations = {
     toastPrdLoaded: "PRD file loaded successfully.",
     toastPrdLoadFailed: "Failed to read PRD file.",
     toastPrdTypeWarning: "Only text or markdown files (.md, .txt) are supported.",
+    stepIndicator: "Step {step} of 3: {title}",
+    proposalsTitle: "Concept Divergence (Multi-Option Selection)",
+    proposalsDesc: "LAO has generated three distinct product directions based on your seed idea and constraints. Select the best match to sprout specifications.",
+    optionATitle: "Option A: Fast MVP",
+    optionBTitle: "Option B: Structural Extension",
+    optionCTitle: "Option C: Differentiated Experiment",
+    recommendedLabel: "Director Recommendation",
+    reasonLabel: "Rationale",
+    discardedLabel: "Discarded Options Context",
+    decisionsRequiredLabel: "Key Decisions Required",
+    customAdjustmentsPlaceholder: "Add specific adjustments, combined features, or modifications to the chosen option...",
+    regenerateFeedbackPlaceholder: "Provide feedback to regenerate alternative directions (e.g., 'Make Option B more lightweight, focus on mobile')...",
+    regenerateBtn: "Regenerate Drafts",
+    selectOptionBtn: "Select and Sprout Spec",
+    toastProposalsGenerated: "Concept proposals generated successfully!",
+    toastSpecSproutingStarted: "Sprouting specifications based on selected concept...",
+    loadingProposals: "Diverging Concepts...",
+    loadingProposalsDesc: "Intake Agent is defining multiple routes, Director Agent is analyzing trade-offs, and Conflict Detector is auditing feasibility. Please wait.",
   },
   ko: {
     projectNamePlaceholder: "예: 로컬 데이터베이스 웹 UI",
@@ -144,7 +162,7 @@ const translations = {
     interactiveDesc: "설계 진행 후 변경 알림",
     autopilotLabel: "완전 자동 (하)",
     autopilotDesc: "개입 없는 자율 설계 진행",
-    sproutSpecsBtn: "핵심 명세 자동 생성 시작",
+    sproutSpecsBtn: "아이디어 분석 및 대안 기획 생성",
     loadingSpecs: "AI 에이전트단 오케스트레이션 중...",
     loadingSpecsDesc: "기획 에이전트가 초안을 작성하고, 대안 분석 에이전트가 선택지를 분기하고, 모순 감지 에이전트가 설계를 검토하고 있습니다. 잠시만 기다려 주세요.",
     startDevelopment: "개발 단계 전환",
@@ -209,6 +227,24 @@ const translations = {
     toastPrdLoaded: "PRD 파일을 성공적으로 불러왔습니다.",
     toastPrdLoadFailed: "PRD 파일을 읽는데 실패했습니다.",
     toastPrdTypeWarning: "텍스트 또는 마크다운 파일(.md, .txt)만 불러올 수 있습니다.",
+    stepIndicator: "3단계 중 {step}단계: {title}",
+    proposalsTitle: "기획 대안 분산 및 선택",
+    proposalsDesc: "LAO가 입력하신 아이디어와 골든 룰에 기반하여 서로 다른 세 가지 제품 접근 방향을 생성했습니다. 가장 적합한 접근안을 선택해 명세를 구체화하세요.",
+    optionATitle: "대안 A: 빠른 MVP형",
+    optionBTitle: "대안 B: 구조 확장형",
+    optionCTitle: "대안 C: 차별화 실험형",
+    recommendedLabel: "디렉터 추천안",
+    reasonLabel: "추천 사유",
+    discardedLabel: "보류한 선택지 분석",
+    decisionsRequiredLabel: "사용자가 결정해야 할 항목",
+    customAdjustmentsPlaceholder: "선택한 대안에 추가하고 싶은 맞춤형 세부 요구사항이나 결합하고 싶은 기능들을 입력해 주세요...",
+    regenerateFeedbackPlaceholder: "기획 대안을 다시 생성하고 싶다면 피드백을 적어주세요 (예: '대안 B를 더 가볍게 만들고 모바일에만 집중하도록 해줘')...",
+    regenerateBtn: "대안 재구성 및 생성",
+    selectOptionBtn: "대안 선택 및 핵심 명세 생성",
+    toastProposalsGenerated: "세 가지 대안이 구성되었습니다!",
+    toastSpecSproutingStarted: "선택한 대안을 토대로 사양 명세를 구체화하는 중...",
+    loadingProposals: "대안 기획안 발산 중...",
+    loadingProposalsDesc: "기획 에이전트가 여러 도메인 접근안을 정의하고, 디렉터 에이전트가 각 장단점을 비교하여 최선의 추천 시나리오를 조율하고 있습니다. 잠시만 기다려 주세요.",
   }
 };
 
@@ -256,6 +292,12 @@ export default function App() {
   });
   const [intakeProvider, setIntakeProvider] = useState('gemini');
   const [intakeModel, setIntakeModel] = useState('');
+
+  // Concept Divergence & Proposal states
+  const [proposals, setProposals] = useState<IntakeProposals | null>(null);
+  const [selectedOption, setSelectedOption] = useState<'A' | 'B' | 'C' | null>(null);
+  const [userAdjustments, setUserAdjustments] = useState('');
+  const [regenerationFeedback, setRegenerationFeedback] = useState('');
 
   // Settings Modal States
   const [showSettings, setShowSettings] = useState(false);
@@ -338,6 +380,18 @@ export default function App() {
         if (configData.automationLevel) {
           setIntakeLevel(configData.automationLevel);
         }
+        if (configData.proposals) {
+          setProposals(configData.proposals);
+        }
+        if (configData.selectedOptionKey) {
+          setSelectedOption(configData.selectedOptionKey);
+        }
+        if (configData.projectName) {
+          setIntakeProjectName(configData.projectName);
+        }
+        if (configData.projectDesc) {
+          setIntakeDesc(configData.projectDesc);
+        }
         
         if (configData.projectName) {
           // Fetch specs, decisions, criteria, messages, tasks
@@ -408,7 +462,7 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  // 2. Intake Sprouting
+  // 2. Intake Propose Options
   const handleIntakeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!intakeProjectName.trim() || !intakeDesc.trim()) {
@@ -416,7 +470,7 @@ export default function App() {
     }
     setIsInitializing(true);
     try {
-      const res = await fetch('/api/project/intake', {
+      const res = await fetch('/api/project/intake/propose', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -429,7 +483,76 @@ export default function App() {
         })
       });
 
-      if (!res.ok) throw new Error('Intake failed');
+      if (!res.ok) throw new Error('Failed to generate proposals');
+      const data = await res.json();
+      setConfig(data.config);
+      setFormConfig(data.config);
+      setProposals(data.proposals);
+      // Reset selected option on new idea submit
+      setSelectedOption(null);
+      setUserAdjustments('');
+      setRegenerationFeedback('');
+      showToast(t.toastProposalsGenerated, 'success');
+    } catch (e: any) {
+      showToast(`Initialization failed: ${e.message}`, 'error');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  // 2.5. Regenerate Proposals with Feedback
+  const handleRegenerateProposals = async () => {
+    if (!regenerationFeedback.trim()) {
+      return showToast('Please enter feedback to regenerate drafts', 'warning');
+    }
+    setIsInitializing(true);
+    try {
+      const res = await fetch('/api/project/intake/propose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectName: intakeProjectName,
+          projectDesc: intakeDesc,
+          automationLevel: intakeLevel,
+          goldenRules: intakeGoldenRules,
+          provider: intakeProvider,
+          model: intakeModel,
+          feedback: regenerationFeedback
+        })
+      });
+
+      if (!res.ok) throw new Error('Regeneration failed');
+      const data = await res.json();
+      setConfig(data.config);
+      setFormConfig(data.config);
+      setProposals(data.proposals);
+      setSelectedOption(null);
+      setRegenerationFeedback('');
+      showToast(t.toastProposalsGenerated, 'success');
+    } catch (e: any) {
+      showToast(`Regeneration failed: ${e.message}`, 'error');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  // 2.8. Confirm Selection and Sprout Specifications
+  const handleSelectOptionSubmit = async () => {
+    if (!selectedOption) {
+      return showToast('Please select one of the three options', 'warning');
+    }
+    setIsInitializing(true);
+    try {
+      const res = await fetch('/api/project/intake/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedOptionKey: selectedOption,
+          userAdjustments
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to sprout specifications');
       const data = await res.json();
       setConfig(data.config);
       setFormConfig(data.config);
@@ -440,7 +563,7 @@ export default function App() {
       compileSpecs();
       showToast(t.toastSprouted, 'success');
     } catch (e: any) {
-      showToast(`Initialization failed: ${e.message}`, 'error');
+      showToast(`Sprouting failed: ${e.message}`, 'error');
     } finally {
       setIsInitializing(false);
     }
@@ -976,13 +1099,16 @@ export default function App() {
 
   // Render Loader screen during initialization
   if (isInitializing) {
+    const isSproutingSpec = config && config.onboardingStep === 3;
+    const title = isSproutingSpec ? t.loadingSpecs : t.loadingProposals;
+    const desc = isSproutingSpec ? t.loadingSpecsDesc : t.loadingProposalsDesc;
     return (
       <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
         <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden my-auto shrink-0">
           <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-emerald-500/10 animate-pulse pointer-events-none" />
           <Loader2 className="w-12 h-12 text-violet-500 animate-spin mx-auto mb-6" />
-          <h2 className="text-xl font-bold text-slate-200 mb-2">{t.loadingSpecs}</h2>
-          <p className="text-sm text-slate-400">{t.loadingSpecsDesc}</p>
+          <h2 className="text-xl font-bold text-slate-200 mb-2">{title}</h2>
+          <p className="text-sm text-slate-400">{desc}</p>
         </div>
       </div>
     );
@@ -991,7 +1117,9 @@ export default function App() {
   // Render Intake Wizard if no active project config exists
   if (!config || !config.sprouted) {
     return (
-      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-start p-4 md:p-8 overflow-y-auto relative">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
+        
         {/* Language switcher & Settings on top right */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <button
@@ -1011,154 +1139,379 @@ export default function App() {
             {lang === 'ko' ? 'English' : '한국어'}
           </button>
         </div>
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
-        
-        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto shrink-0">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
-          {/* Heading */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
-              <Brain className="w-8 h-8 text-violet-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-slate-100 tracking-tight">{t.launchProject}</h1>
-              <p className="text-sm text-slate-400">{t.launchDesc}</p>
-            </div>
+        {/* Step Progress Bar */}
+        <div className="w-full max-w-4xl mt-12 mb-8 relative z-10">
+          <div className="flex items-center justify-between text-[11px] text-slate-500 font-bold mb-2 uppercase tracking-wider">
+            <span>
+              {t.stepIndicator
+                .replace('{step}', proposals ? '2' : '1')
+                .replace('{title}', proposals ? (lang === 'ko' ? '접근안 결정 및 피드백' : 'Concept Selection & Adjustments') : (lang === 'ko' ? '요구사항 입력' : 'Idea & Constraints'))}
+            </span>
+            <span className="text-violet-400">{proposals ? 'Step 2 of 3' : 'Step 1 of 3'}</span>
           </div>
+          <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-850">
+            <div 
+              className="bg-gradient-to-r from-violet-500 via-violet-650 to-emerald-500 h-full transition-all duration-500" 
+              style={{ width: proposals ? '66%' : '33%' }}
+            />
+          </div>
+        </div>
 
-          <div className="space-y-5">
-            {/* Project Name */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.projectNameLabel}</label>
-              <input
-                id="project-name-input"
-                type="text"
-                placeholder={t.projectNamePlaceholder}
-                value={intakeProjectName}
-                onChange={e => setIntakeProjectName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
-                required
-              />
-            </div>
+        {!proposals ? (
+          /* STEP 1: Intake input form */
+          <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto shrink-0">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
-            {/* Rough Idea */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">{t.roughIdeaLabel}</label>
-                <div className="flex items-center">
-                  <input
-                    type="file"
-                    id="prd-file-upload"
-                    accept=".md,.txt"
-                    className="hidden"
-                    onChange={handleFileImport}
-                  />
-                  <label
-                    htmlFor="prd-file-upload"
-                    className="cursor-pointer flex items-center gap-1 px-2.5 py-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-lg text-[9px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
-                  >
-                    <FileText className="w-3 h-3" />
-                    {t.importPrdBtn}
-                  </label>
-                </div>
+            {/* Heading */}
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
+                <Brain className="w-8 h-8 text-violet-400" />
               </div>
-              <textarea
-                id="project-desc-input"
-                placeholder={t.roughIdeaPlaceholder}
-                value={intakeDesc}
-                onChange={e => setIntakeDesc(e.target.value)}
-                rows={4}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
-                required
-              />
-            </div>
-
-            {/* Golden Rules Config */}
-            <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                {t.goldenRulesTitle}
-              </span>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.frontendLabel}</label>
-                  <input
-                    type="text"
-                    value={intakeGoldenRules.frontend}
-                    onChange={e => setIntakeGoldenRules(prev => ({ ...prev, frontend: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.backendLabel}</label>
-                  <input
-                    type="text"
-                    value={intakeGoldenRules.backend}
-                    onChange={e => setIntakeGoldenRules(prev => ({ ...prev, backend: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.databaseLabel}</label>
-                  <input
-                    type="text"
-                    value={intakeGoldenRules.database}
-                    onChange={e => setIntakeGoldenRules(prev => ({ ...prev, database: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.additionalLabel}</label>
-                  <input
-                    type="text"
-                    value={intakeGoldenRules.additional}
-                    onChange={e => setIntakeGoldenRules(prev => ({ ...prev, additional: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
-                  />
-                </div>
+              <div>
+                <h1 className="text-2xl font-black text-slate-100 tracking-tight">{t.launchProject}</h1>
+                <p className="text-sm text-slate-400">{t.launchDesc}</p>
               </div>
             </div>
 
-            {/* Automation Level Selection */}
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.automationLevelLabel}</label>
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { value: 'supervised', label: t.supervisedLabel, desc: t.supervisedDesc },
-                  { value: 'interactive', label: t.interactiveLabel, desc: t.interactiveDesc },
-                  { value: 'autopilot', label: t.autopilotLabel, desc: t.autopilotDesc }
-                ].map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => setIntakeLevel(opt.value as any)}
-                    className={`border p-3.5 rounded-xl text-left transition-all ${
-                      intakeLevel === opt.value
-                        ? 'border-violet-500 bg-violet-500/5'
-                        : 'border-slate-800 bg-slate-950 hover:bg-slate-900/40'
+            <div className="space-y-5">
+              {/* Project Name */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.projectNameLabel}</label>
+                <input
+                  id="project-name-input"
+                  type="text"
+                  placeholder={t.projectNamePlaceholder}
+                  value={intakeProjectName}
+                  onChange={e => setIntakeProjectName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  required
+                />
+              </div>
+
+              {/* Rough Idea */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">{t.roughIdeaLabel}</label>
+                  <div className="flex items-center">
+                    <input
+                      type="file"
+                      id="prd-file-upload"
+                      accept=".md,.txt"
+                      className="hidden"
+                      onChange={handleFileImport}
+                    />
+                    <label
+                      htmlFor="prd-file-upload"
+                      className="cursor-pointer flex items-center gap-1 px-2.5 py-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-lg text-[9px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                    >
+                      <FileText className="w-3 h-3" />
+                      {t.importPrdBtn}
+                    </label>
+                  </div>
+                </div>
+                <textarea
+                  id="project-desc-input"
+                  placeholder={t.roughIdeaPlaceholder}
+                  value={intakeDesc}
+                  onChange={e => setIntakeDesc(e.target.value)}
+                  rows={4}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                  required
+                />
+              </div>
+
+              {/* Golden Rules Config */}
+              <div className="bg-slate-950/50 border border-slate-800/80 rounded-2xl p-4">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                  {t.goldenRulesTitle}
+                </span>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.frontendLabel}</label>
+                    <input
+                      type="text"
+                      value={intakeGoldenRules.frontend}
+                      onChange={e => setIntakeGoldenRules(prev => ({ ...prev, frontend: e.target.value }))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.backendLabel}</label>
+                    <input
+                      type="text"
+                      value={intakeGoldenRules.backend}
+                      onChange={e => setIntakeGoldenRules(prev => ({ ...prev, backend: e.target.value }))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.databaseLabel}</label>
+                    <input
+                      type="text"
+                      value={intakeGoldenRules.database}
+                      onChange={e => setIntakeGoldenRules(prev => ({ ...prev, database: e.target.value }))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.additionalLabel}</label>
+                    <input
+                      type="text"
+                      value={intakeGoldenRules.additional}
+                      onChange={e => setIntakeGoldenRules(prev => ({ ...prev, additional: e.target.value }))}
+                      className="w-full bg-slate-950 border border-slate-850 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Automation Level Selection */}
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.automationLevelLabel}</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { value: 'supervised', label: t.supervisedLabel, desc: t.supervisedDesc },
+                    { value: 'interactive', label: t.interactiveLabel, desc: t.interactiveDesc },
+                    { value: 'autopilot', label: t.autopilotLabel, desc: t.autopilotDesc }
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setIntakeLevel(opt.value as any)}
+                      className={`border p-3.5 rounded-xl text-left transition-all ${
+                        intakeLevel === opt.value
+                          ? 'border-violet-500 bg-violet-500/5'
+                          : 'border-slate-800 bg-slate-950 hover:bg-slate-900/40'
+                      }`}
+                    >
+                      <span className={`block text-xs font-bold ${intakeLevel === opt.value ? 'text-violet-400' : 'text-slate-300'}`}>
+                        {opt.label}
+                      </span>
+                      <span className="block text-[10px] text-slate-500 mt-1">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              id="sprout-submit-btn"
+              type="submit"
+              className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 px-6 rounded-xl mt-6 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
+            >
+              <Sparkles className="w-4 h-4 animate-pulse" />
+              {t.sproutSpecsBtn}
+            </button>
+          </form>
+        ) : (
+          /* STEP 2: Proposals display card deck & adjustments */
+          <div className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-6xl w-full shadow-2xl overflow-hidden my-auto shrink-0">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-violet-600/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-96 h-96 bg-emerald-600/5 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Heading */}
+            <div className="flex items-start justify-between mb-8 border-b border-slate-800/80 pb-6 flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
+                  <Brain className="w-8 h-8 text-violet-400" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-black text-slate-100 tracking-tight">{t.proposalsTitle}</h1>
+                  <p className="text-sm text-slate-400 mt-1">{t.proposalsDesc}</p>
+                </div>
+              </div>
+              
+              {/* Go Back button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setProposals(null);
+                  setSelectedOption(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 transition-colors"
+              >
+                {lang === 'ko' ? '1단계로 돌아가기' : 'Back to Step 1'}
+              </button>
+            </div>
+
+            {/* 3 Option Cards */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {(['A', 'B', 'C'] as const).map(key => {
+                const opt = proposals.options[key];
+                const isSelected = selectedOption === key;
+                return (
+                  <div
+                    key={key}
+                    onClick={() => setSelectedOption(key)}
+                    className={`relative cursor-pointer border rounded-2xl p-5 flex flex-col justify-between transition-all duration-300 transform hover:-translate-y-1 hover:shadow-xl ${
+                      isSelected
+                        ? 'border-violet-500 bg-violet-950/15 shadow-[0_0_25px_rgba(139,92,246,0.1)] ring-1 ring-violet-500/40'
+                        : 'border-slate-800/80 bg-slate-950/40 hover:border-slate-700 hover:bg-slate-950/60'
                     }`}
                   >
-                    <span className={`block text-xs font-bold ${intakeLevel === opt.value ? 'text-violet-400' : 'text-slate-300'}`}>
-                      {opt.label}
+                    <div>
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-3.5">
+                        <span className={`text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full ${
+                          key === 'A' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                          key === 'B' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                          'bg-violet-500/10 text-violet-400 border border-violet-500/20'
+                        }`}>
+                          {key === 'A' ? t.optionATitle : key === 'B' ? t.optionBTitle : t.optionCTitle}
+                        </span>
+                        {isSelected && (
+                          <div className="p-1 bg-violet-500 rounded-full text-white shadow-lg shadow-violet-500/30">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </div>
+
+                      <h3 className="text-base font-bold text-slate-200 mb-1.5">{opt.title}</h3>
+                      <p className="text-xs text-slate-400 mb-4 leading-relaxed">{opt.objective}</p>
+
+                      <div className="space-y-3.5 border-t border-slate-900 pt-3.5 text-xs">
+                        <div>
+                          <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Target User</span>
+                          <span className="text-slate-355">{opt.coreUser}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Core Scope</span>
+                          <ul className="list-disc pl-4 space-y-0.5 text-slate-355">
+                            {opt.scope.map((s, idx) => <li key={idx}>{s}</li>)}
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase font-bold text-emerald-400/80 mb-1">Pros</span>
+                          <ul className="list-disc pl-4 space-y-0.5 text-emerald-355/90">
+                            {opt.pros.map((p, idx) => <li key={idx}>{p}</li>)}
+                          </ul>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase font-bold text-rose-400/80 mb-1">Cons</span>
+                          <ul className="list-disc pl-4 space-y-0.5 text-rose-355/90">
+                            {opt.cons.map((c, idx) => <li key={idx}>{c}</li>)}
+                          </ul>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-slate-900 mt-4 pt-3.5">
+                      <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Best Scenario</span>
+                      <p className="text-[11px] text-slate-400 italic leading-snug">{opt.recommendedScenario}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Director Recommendation */}
+            <div className="relative border border-violet-500/25 bg-gradient-to-r from-violet-950/15 via-slate-900/30 to-slate-950/50 rounded-2xl p-6 mb-8 shadow-lg shadow-violet-900/5">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/5 rounded-full blur-2xl pointer-events-none" />
+              <span className="absolute -top-3 left-6 flex items-center gap-1 px-3 py-1 bg-violet-650 border border-violet-400/30 rounded-full text-[10px] uppercase font-black text-white tracking-widest shadow-md">
+                <Sparkles className="w-3 h-3 fill-white" />
+                {t.recommendedLabel}
+              </span>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs mt-2">
+                <div>
+                  <div className="mb-4">
+                    <span className="block text-[10px] uppercase font-bold text-violet-400 mb-1">Recommended Approach</span>
+                    <span className="text-sm font-black text-slate-200">
+                      Option {proposals.recommendation.recommendedOption} — {proposals.options[proposals.recommendation.recommendedOption].title}
                     </span>
-                    <span className="block text-[10px] text-slate-500 mt-1">{opt.desc}</span>
-                  </button>
-                ))}
+                  </div>
+                  <div>
+                    <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.reasonLabel}</span>
+                    <p className="text-slate-355 leading-relaxed">{proposals.recommendation.reason}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4 border-l border-slate-800/80 pl-6">
+                  <div>
+                    <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">{t.discardedLabel}</span>
+                    <p className="text-slate-400 leading-normal">{proposals.recommendation.discardedOptions}</p>
+                  </div>
+                  {proposals.recommendation.combinedElements && (
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Combined Elements (Hybrid Potential)</span>
+                      <p className="text-slate-400 leading-normal">{proposals.recommendation.combinedElements}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="block text-[10px] uppercase font-bold text-violet-400/80 mb-1">{t.decisionsRequiredLabel}</span>
+                    <ul className="list-disc pl-4 space-y-1 text-slate-350">
+                      {proposals.recommendation.userDecisionsRequired.map((d, idx) => (
+                        <li key={idx}>{d}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <button
-            id="sprout-submit-btn"
-            type="submit"
-            className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-3.5 px-6 rounded-xl mt-6 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-violet-600/20"
-          >
-            <Sparkles className="w-4 h-4 animate-pulse" />
-            {t.sproutSpecsBtn}
-          </button>
-        </form>
+            {/* Adjustments & Feedback Row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              {/* User Custom Adjustments */}
+              <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 flex flex-col">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                  {lang === 'ko' ? '기획 맞춤 조정 (선택)' : 'Custom Adjustments (Optional)'}
+                </label>
+                <textarea
+                  placeholder={t.customAdjustmentsPlaceholder}
+                  value={userAdjustments}
+                  onChange={(e) => setUserAdjustments(e.target.value)}
+                  rows={3}
+                  className="w-full h-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                />
+              </div>
+
+              {/* Regeneration Feedback */}
+              <div className="bg-slate-900/30 border border-slate-800/80 rounded-2xl p-5 flex flex-col justify-between">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+                    {lang === 'ko' ? '기획 대안 피드백 및 재생성' : 'Regenerate with Feedback'}
+                  </label>
+                  <textarea
+                    placeholder={t.regenerateFeedbackPlaceholder}
+                    value={regenerationFeedback}
+                    onChange={(e) => setRegenerationFeedback(e.target.value)}
+                    rows={2}
+                    className="w-full bg-slate-950 border border-slate-850 rounded-xl px-3 py-2 text-xs text-slate-300 placeholder-slate-600 focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRegenerateProposals}
+                  className="mt-3 self-end flex items-center gap-1.5 px-4 py-2 bg-slate-950 border border-slate-850 hover:bg-slate-800 rounded-xl text-xs font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                  {t.regenerateBtn}
+                </button>
+              </div>
+            </div>
+
+            {/* Big Action Submit */}
+            <div className="flex flex-col items-center">
+              <button
+                type="button"
+                onClick={handleSelectOptionSubmit}
+                disabled={!selectedOption}
+                className="px-8 py-4 bg-violet-650 hover:bg-violet-600 disabled:opacity-55 disabled:cursor-not-allowed text-white font-bold rounded-2xl transition-all duration-300 flex items-center gap-2.5 shadow-xl hover:shadow-violet-600/10 text-sm"
+              >
+                <Sparkles className="w-4 h-4" />
+                {t.selectOptionBtn}
+              </button>
+              {!selectedOption && (
+                <span className="text-[10px] text-slate-500 mt-2 text-center">
+                  {lang === 'ko' ? '방향 선택을 진행하려면 위 대안 카드 중 하나를 클릭해 주세요.' : 'Please select one of the three option cards above to proceed.'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Floating toast */}
         {errorToast && (

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ProjectConfig, SpecSection, DecisionCard, NodeMessage, GoldenRules } from './models';
+import { ProjectConfig, SpecSection, DecisionCard, NodeMessage, GoldenRules, IntakeProposals } from './models';
 import { randomUUID } from 'crypto';
 
 const LAO_DIR_NAME = '.lao';
@@ -15,6 +15,8 @@ export class StorageManager {
   private compiledSpecFilePath: string;
   private messagesFilePath: string;
   private taskFilePath: string;
+  private proposalsFilePath: string;
+  private mockupFilePath: string;
 
   constructor(projectRoot: string) {
     this.laoDirPath = path.join(projectRoot, LAO_DIR_NAME);
@@ -26,6 +28,8 @@ export class StorageManager {
     this.compiledSpecFilePath = path.join(this.laoDirPath, 'spec_compiled.md');
     this.messagesFilePath = path.join(this.laoDirPath, 'messages.json');
     this.taskFilePath = path.join(this.laoDirPath, 'task.md');
+    this.proposalsFilePath = path.join(this.laoDirPath, 'proposals.json');
+    this.mockupFilePath = path.join(this.laoDirPath, 'mockup.html');
   }
 
   /**
@@ -394,5 +398,85 @@ export class StorageManager {
 
     lines[index] = `${leadingWhitespace}${prefix} ${content}`;
     this.writeTasksRaw(lines.join('\n'));
+  }
+
+  /**
+   * Reads proposals.json
+   */
+  public readProposals(): IntakeProposals | null {
+    if (!fs.existsSync(this.proposalsFilePath)) {
+      return null;
+    }
+    try {
+      const raw = fs.readFileSync(this.proposalsFilePath, 'utf8');
+      return JSON.parse(raw);
+    } catch (e) {
+      console.warn('Failed to parse proposals.json:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Writes proposals to proposals.json
+   */
+  public writeProposals(proposals: IntakeProposals): void {
+    fs.writeFileSync(this.proposalsFilePath, JSON.stringify(proposals, null, 2), 'utf8');
+  }
+
+  /**
+   * Clears all specs, decisions, proposals, mockup, and task checklist files to start fresh.
+   */
+  public clearOnboardingFiles(): void {
+    // 1. Clear specs files
+    if (fs.existsSync(this.specsDirPath)) {
+      const files = fs.readdirSync(this.specsDirPath);
+      for (const file of files) {
+        const p = path.join(this.specsDirPath, file);
+        if (fs.statSync(p).isFile() && file.endsWith('.md')) {
+          fs.unlinkSync(p);
+        }
+      }
+    }
+    // 2. Clear specs/features files
+    if (fs.existsSync(this.featuresDirPath)) {
+      const files = fs.readdirSync(this.featuresDirPath);
+      for (const file of files) {
+        const p = path.join(this.featuresDirPath, file);
+        if (fs.statSync(p).isFile() && file.endsWith('.md')) {
+          fs.unlinkSync(p);
+        }
+      }
+    }
+    // 3. Clear decisions
+    if (fs.existsSync(this.decisionsDirPath)) {
+      const files = fs.readdirSync(this.decisionsDirPath);
+      for (const file of files) {
+        const p = path.join(this.decisionsDirPath, file);
+        if (fs.statSync(p).isFile() && file.endsWith('.json')) {
+          fs.unlinkSync(p);
+        }
+      }
+    }
+    // 4. Clear other workspace files
+    if (fs.existsSync(this.proposalsFilePath)) {
+      try {
+        fs.unlinkSync(this.proposalsFilePath);
+      } catch {}
+    }
+    if (fs.existsSync(this.mockupFilePath)) {
+      try {
+        fs.unlinkSync(this.mockupFilePath);
+      } catch {}
+    }
+    if (fs.existsSync(this.taskFilePath)) {
+      try {
+        fs.unlinkSync(this.taskFilePath);
+      } catch {}
+    }
+    
+    // Clear messages
+    if (fs.existsSync(this.messagesFilePath)) {
+      fs.writeFileSync(this.messagesFilePath, JSON.stringify([], null, 2), 'utf8');
+    }
   }
 }

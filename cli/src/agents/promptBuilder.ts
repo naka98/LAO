@@ -47,9 +47,30 @@ ${params.userMessage}
     projectName: string;
     projectDesc: string;
     goldenRules: GoldenRules;
+    chosenOption?: any;
+    userAdjustments?: string;
   }): string {
+    const optionBlock = params.chosenOption ? `
+## Chosen Planning Concept
+Option ${params.chosenOption.key}: ${params.chosenOption.title}
+- Objective: ${params.chosenOption.objective}
+- Core User: ${params.chosenOption.coreUser}
+- Scope to Build:
+${(params.chosenOption.scope || []).map((s: string) => `  * ${s}`).join('\n')}
+- Pros: ${(params.chosenOption.pros || []).join(', ')}
+- Cons: ${(params.chosenOption.cons || []).join(', ')}
+- Recommended Scenario: ${params.chosenOption.recommendedScenario}
+` : '';
+
+    const adjustmentsBlock = params.userAdjustments ? `
+## Additional User Adjustments & Merge Constraints
+"${params.userAdjustments}"
+` : '';
+
     return `
 You are the **Specifier**. Your job is to translate the following rough idea into a structured draft specification (both the Core Spec and 2 to 4 primary feature sections) under the strict constraints of the Golden Rules.
+${optionBlock}
+${adjustmentsBlock}
 
 ## Project Title
 ${params.projectName}
@@ -91,6 +112,105 @@ The JSON must match the following TypeScript shape:
 }
 
 No other prose or text outside the json block. Keep markdown content well-structured and detailed.
+`;
+  }
+
+  /**
+   * Prompts the Director to generate exactly three planning concepts
+   */
+  public static buildIntakeDivergencePrompt(params: {
+    projectName: string;
+    projectDesc: string;
+    goldenRules: GoldenRules;
+    feedback?: string;
+  }): string {
+    const feedbackBlock = params.feedback ? `
+## Previous Draft Feedback (User Request)
+Please modify and regenerate the proposals incorporating this specific feedback:
+"${params.feedback}"
+` : '';
+
+    return `
+You are the **Director** and **Lead Architect**. Your task is to analyze the following project idea and generate exactly three distinct product planning concepts (Option A, Option B, and Option C) along with a Director Recommendation in Korean.
+
+## Project Title
+${params.projectName}
+
+## Rough Idea / Description
+${params.projectDesc}
+
+## Technical Golden Rules
+- Frontend: ${params.goldenRules.frontend}
+- Backend: ${params.goldenRules.backend}
+- Database: ${params.goldenRules.database}
+- Additional Constraints: ${params.goldenRules.additional}
+${feedbackBlock}
+
+## The Three Concepts to Generate:
+1. **Option A — 빠른 MVP형 (Fast MVP Type)**:
+   - Objective: Validate core value as fast as possible. Minimal features, ultra-light layout, SQLite/local storage.
+   - Core User: Early adopters, testing users.
+   - Scope: Only the single most crucial feature.
+2. **Option B — 구조 확장형 (Structural Extension Type)**:
+   - Objective: Production-ready scalability, database relationships, multiple user/auth patterns, clean architecture.
+   - Core User: General production users, security-conscious clients.
+   - Scope: Core feature + multi-user authentication, settings, logging, relational schemas.
+3. **Option C — 차별화 실험형 (Differentiated Experiment Type)**:
+   - Objective: Highlight a unique competitive advantage (e.g. advanced AI widgets, visualization, interactive flows, offline-sync).
+   - Core User: Power users, tech enthusiasts.
+   - Scope: Core feature + unique premium experiment features.
+
+## Director Recommendation Rules:
+- Propose one of the options (A, B, or C) as the recommendation.
+- Detail the reasoning, what options were discarded and why, what elements can be merged, and what decisions the user must make.
+- Output MUST be strictly in Korean.
+
+## Output Format
+You must output a single, valid JSON block inside a fenced code block of type \`\`\`json.
+The JSON must match the following TypeScript shape:
+{
+  "options": {
+    "A": {
+      "key": "A",
+      "title": "빠른 MVP형 - [Sub-title matching option A]",
+      "objective": "[Objective of Option A]",
+      "coreUser": "[Core User profile]",
+      "scope": ["Feature scope item 1", "Feature scope item 2"],
+      "pros": ["Pro 1", "Pro 2"],
+      "cons": ["Con 1", "Con 2"],
+      "recommendedScenario": "[Recommended scenario]"
+    },
+    "B": {
+      "key": "B",
+      "title": "구조 확장형 - [Sub-title matching option B]",
+      "objective": "[Objective of Option B]",
+      "coreUser": "[Core User profile]",
+      "scope": ["Feature scope item 1", "Feature scope item 2", "Feature scope item 3"],
+      "pros": ["Pro 1", "Pro 2"],
+      "cons": ["Con 1", "Con 2"],
+      "recommendedScenario": "[Recommended scenario]"
+    },
+    "C": {
+      "key": "C",
+      "title": "차별화 실험형 - [Sub-title matching option C]",
+      "objective": "[Objective of Option C]",
+      "coreUser": "[Core User profile]",
+      "scope": ["Feature scope item 1", "Feature scope item 2", "Feature scope item 3"],
+      "pros": ["Pro 1", "Pro 2"],
+      "cons": ["Con 1", "Con 2"],
+      "recommendedScenario": "[Recommended scenario]"
+    }
+  },
+  "recommendation": {
+    "recommendedOption": "A",
+    "reason": "[Detail why A was selected]",
+    "discardedOptions": "[Explain why B and C were not fully chosen]",
+    "combinedElements": "[Optional: any elements from B or C to borrow]",
+    "userDecisionsRequired": ["Decision 1", "Decision 2"]
+  }
+}
+
+Do not include any prose outside the json block. All text fields in the options and recommendation MUST be in Korean.
 `;
   }
 

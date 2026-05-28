@@ -1,4 +1,4 @@
-import { ProjectConfig, SpecSection, DecisionCard, NodeMessage } from '../models';
+import { ProjectConfig, SpecSection, DecisionCard, NodeMessage, IntakeProposals, IntakeOption } from '../models';
 import { GeminiClient } from '../gemini';
 import { PromptBuilder } from './promptBuilder';
 import { randomUUID } from 'crypto';
@@ -118,13 +118,19 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Sprout draft specifications based on project config and golden rules
+   * Sprout draft specifications based on project config, chosen option, and user adjustments
    */
-  public async runIntakeSprout(config: ProjectConfig): Promise<{ coreSpec: string; features: SpecSection[] }> {
+  public async runIntakeSprout(
+    config: ProjectConfig,
+    chosenOption?: IntakeOption,
+    userAdjustments?: string
+  ): Promise<{ coreSpec: string; features: SpecSection[] }> {
     const prompt = PromptBuilder.buildIntakeSproutPrompt({
       projectName: config.projectName,
       projectDesc: config.projectDesc,
-      goldenRules: config.goldenRules
+      goldenRules: config.goldenRules,
+      chosenOption,
+      userAdjustments
     });
 
     const responseRaw = await this.geminiClient.generateText({
@@ -170,6 +176,27 @@ export class AgentOrchestrator {
       coreSpec: coreSpecStr,
       features
     };
+  }
+
+  /**
+   * Sprout three distinct design options and a Director recommendation
+   */
+  public async runIntakeDivergence(config: ProjectConfig, feedback?: string): Promise<IntakeProposals> {
+    const prompt = PromptBuilder.buildIntakeDivergencePrompt({
+      projectName: config.projectName,
+      projectDesc: config.projectDesc,
+      goldenRules: config.goldenRules,
+      feedback
+    });
+
+    const responseRaw = await this.geminiClient.generateText({
+      prompt,
+      jsonMode: true,
+      role: 'director'
+    });
+
+    const cleaned = this.cleanJsonResponse(responseRaw);
+    return JSON.parse(cleaned) as IntakeProposals;
   }
 
   /**
