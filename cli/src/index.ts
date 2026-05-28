@@ -431,6 +431,7 @@ app.get('/api/chat/stream', async (req, res) => {
     if (shouldUpdateMockup) {
       // Write chunk to stream notifying of mockup generation
       res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 변경된 기획안을 바탕으로 시안 미리보기를 업데이트하고 있습니다...)*' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'mockup_updating' })}\n\n`);
 
       try {
         const currentSections = storage.readSpecs();

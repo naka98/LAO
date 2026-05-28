@@ -18,7 +18,8 @@ import {
   BookOpen,
   ArrowRight,
   Globe,
-  ListTodo
+  ListTodo,
+  RotateCw
 } from 'lucide-react';
 import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules, TaskItem } from './types';
 import { marked } from 'marked';
@@ -271,6 +272,8 @@ export default function App() {
 
   // Routing and SSE stream states
   const [routingStatus, setRoutingStatus] = useState<{ isRouting: boolean; route?: string; reasoning?: string }>({ isRouting: false });
+  const [isMockupUpdating, setIsMockupUpdating] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
   const activeEventSourceRef = useRef<EventSource | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
@@ -624,6 +627,8 @@ export default function App() {
             reasoning: data.reasoning
           });
           currentAgent = data.route;
+        } else if (data.type === 'mockup_updating') {
+          setIsMockupUpdating(true);
         } else if (data.type === 'content') {
           setRoutingStatus(prev => ({ ...prev, isRouting: false }));
           incomingProse += data.chunk || '';
@@ -644,11 +649,14 @@ export default function App() {
           eventSource.close();
           setIsSending(false);
           setRoutingStatus({ isRouting: false });
+          setIsMockupUpdating(false);
+          setIframeKey(prev => prev + 1);
           fetchProjectData(); // Reload full states (spec, features, messages)
         } else if (data.type === 'error') {
           eventSource.close();
           setIsSending(false);
           setRoutingStatus({ isRouting: false });
+          setIsMockupUpdating(false);
           showToast(`Agent error: ${data.error}`, 'error');
         }
       } catch (e) {
@@ -660,6 +668,7 @@ export default function App() {
       eventSource.close();
       setIsSending(false);
       setRoutingStatus({ isRouting: false });
+      setIsMockupUpdating(false);
       showToast('SSE connection closed or lost', 'error');
     };
   };
@@ -1619,23 +1628,52 @@ export default function App() {
                       onChange={e => setPreviewUrl(e.target.value)}
                       disabled={config?.phase === 'planning'}
                       placeholder={t.previewUrlPlaceholder}
-                      className="flex-1 max-w-md bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-violet-500 font-mono disabled:opacity-75"
+                      className="flex-1 max-w-md bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-350 focus:outline-none focus:border-violet-500 font-mono disabled:opacity-70"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setIframeKey(prev => prev + 1)}
+                      title={lang === 'ko' ? '새로고침' : 'Refresh Preview'}
+                      className="p-1.5 hover:bg-slate-800 active:bg-slate-850 border border-slate-850 hover:border-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${isMockupUpdating ? 'animate-spin' : ''}`} />
+                    </button>
                   </div>
                   {config?.phase === 'planning' && (
-                    <span className="text-[10px] bg-violet-500/10 border border-violet-500/20 text-violet-400 font-extrabold px-2.5 py-1 rounded-xl shrink-0 animate-pulse">
-                      {lang === 'ko' ? '기획 시안 프로토타입' : 'Design Prototype'}
-                    </span>
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-full text-[10px] font-semibold text-slate-300 shadow-inner shrink-0">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span>{lang === 'ko' ? '기획 시안 프로토타입' : 'Design Prototype'}</span>
+                    </div>
                   )}
                 </div>
                 {/* Webpage Viewer Frame */}
                 <div className="flex-1 bg-white relative min-h-[400px]">
                   <iframe
+                    key={iframeKey}
                     src={config?.phase === 'planning' ? '/api/project/mockup' : previewUrl}
                     title="App Preview"
                     className="w-full h-full border-none bg-white"
                     sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
                   />
+                  {/* Mockup Updating Overlay */}
+                  {isMockupUpdating && (
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3 animate-fade-in z-10">
+                      <div className="flex items-center justify-center p-3 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-xl">
+                        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                      </div>
+                      <div className="flex flex-col items-center gap-1 text-center px-4">
+                        <p className="text-sm font-semibold text-slate-200">
+                          {lang === 'ko' ? '시안 업데이트 중...' : 'Updating Mockup...'}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {lang === 'ko' ? 'AI가 기획서 변경사항을 반영하여 시안을 새로 쓰고 있습니다.' : 'AI is rewriting the mockup based on changes.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
