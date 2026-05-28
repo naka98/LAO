@@ -15,17 +15,18 @@ LAO was originally designed with a visual React Flow mindmap canvas. In v0.9, we
 
 ## Key Features
 
-1. **Local CLI AI Engine**: Executes queries using your locally configured CLI clients (`gemini`, `claude`, `codex`, `agy`) via shell processes. All prompt contents are handled through secure temp files.
+1. **Local CLI AI Engine**: Executes queries using your locally configured CLI clients (`gemini`, `claude`, `codex`, `agy`, `cursor`) via shell processes. All prompt contents are handled through secure temp files.
 2. **Multi-Agent Collaboration**: Features a centralized "Director" agent routing inputs to specialized step agents:
    * **Specifier**: Drafts system requirements and structures components modularly.
    * **Researcher**: Explores implementation patterns and tech stacks.
    * **Optionizer**: Generates architectural choices as interactive Decision Cards.
    * **Gap Detector**: Scans specifications for omissions or contradictions.
-3. **Controlled Setup Wizard**: A glassmorphic onboarding screen where you define your project name, rough idea, automation level, and Golden Rules.
+   * **Mockup Generator**: Automatically creates and updates an interactive, premium HTML mockup in `.lao/mockup.html` based on specifications and user request/feedback.
+3. **Controlled Setup Wizard**: A glassmorphic onboarding screen where you define your project name, rough idea, automation level, Golden Rules, AI provider override, and import PRD files directly.
 4. **Interactive Decision Cards**: Resolve architectural choices proposed by the Optionizer. Your selections are logged into the decision criteria file.
 5. **Split-Screen Workspace Layout**:
    * **Left Panel**: Setup wizard, pending Decision Cards, and warning alerts.
-   * **Right Panel**: Real-time live compiled specification viewer (editable during Planning Phase), DevLoop Console logs, and Decision Timeline logs.
+   * **Right Panel**: Real-time live compiled specification viewer (editable during Planning Phase), DevLoop Console logs, Decision Timeline logs, and Live App Preview (renders the interactive mockup in a sandboxed iframe).
 6. **Real-time SSE Token Streaming**: Experience smooth token streaming typing effects on node conversation chats.
 7. **Developer Loop Console**: Run shell commands (build, verify, launch, UI check) directly from the Web UI, streaming outputs in real-time.
 8. **Decision Log Timeline**: Traces chronological decision adoption paths from `.lao/criteria.md`.
@@ -39,7 +40,7 @@ LAO was originally designed with a visual React Flow mindmap canvas. In v0.9, we
 LAO/
 ├── cli/                 # Express backend server & CLI AI runner
 │   ├── src/
-│   │   ├── agents/      # Orchestrator & agent prompt templates
+│   │   ├── agents/      # Orchestrator, prompt builder, & mockup generator
 │   │   ├── compiler.ts  # Spec compiler to Markdown
 │   │   ├── gemini.ts    # Spawn shell CLI client runner
 │   │   ├── index.ts     # Express endpoints & SSE stream routes
@@ -65,6 +66,7 @@ LAO/
   * **Claude CLI**: `claude` (Claude Engineer)
   * **Codex CLI**: `codex`
   * **Antigravity CLI**: `agy` (optional)
+  * **Cursor CLI**: `cursor` (Cursor Agent CLI) (optional)
 
 ### Setup & Launch
 
@@ -143,7 +145,7 @@ yarn lao
 
 You can configure default providers using a `.env` file in the `cli` folder:
 ```env
-LAO_PROVIDER=gemini       # Selected tool (gemini | claude | codex | agy)
+LAO_PROVIDER=gemini       # Selected tool (gemini | claude | codex | agy | cursor)
 LAO_MODEL=                # Override model if required
 ```
 
