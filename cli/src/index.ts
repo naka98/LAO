@@ -217,49 +217,24 @@ app.post('/api/specs/compile', (req, res) => {
 });
 
 // 12. Submit Rough Idea / Intake (Autopilot Sprout)
-app.post('/api/project/intake', async (req, res) => {
+// 12. Submit Rough Idea / Intake (Autopilot Propose Options)
+app.post('/api/project/intake/propose', async (req, res) => {
   try {
-    const { projectName, projectDesc, automationLevel, goldenRules, provider, model } = req.body;
+    const { projectName, projectDesc, automationLevel, goldenRules, provider, model, feedback } = req.body;
     if (!projectName || !projectDesc) {
       return res.status(400).json({ error: 'projectName and projectDesc are required' });
     }
 
-    // Clear specs directory to start fresh
-    const specsPath = path.join(PROJECT_ROOT, '.lao', 'specs');
-    if (fs.existsSync(specsPath)) {
-      const files = fs.readdirSync(specsPath);
-      for (const file of files) {
-        if (file.endsWith('.md')) {
-          fs.unlinkSync(path.join(specsPath, file));
-        }
-      }
-      const featuresPath = path.join(specsPath, 'features');
-      if (fs.existsSync(featuresPath)) {
-        const featFiles = fs.readdirSync(featuresPath);
-        for (const file of featFiles) {
-          if (file.endsWith('.md')) {
-            fs.unlinkSync(path.join(featuresPath, file));
-          }
-        }
-      }
-    }
-    
-    // Clear decisions folder
-    const decPath = path.join(PROJECT_ROOT, '.lao', 'decisions');
-    if (fs.existsSync(decPath)) {
-      const files = fs.readdirSync(decPath);
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          fs.unlinkSync(path.join(decPath, file));
-        }
-      }
+    // Only clear on first run (no feedback)
+    if (!feedback) {
+      storage.clearOnboardingFiles();
     }
 
     // Initialize config
     const config = storage.initStorage(String(projectName), String(projectDesc));
     config.projectName = String(projectName);
     config.projectDesc = String(projectDesc);
-    config.sprouted = true;
+    config.sprouted = false;
     config.automationLevel = automationLevel || 'supervised';
     if (goldenRules) {
       config.goldenRules = goldenRules;
@@ -277,10 +252,49 @@ app.post('/api/project/intake', async (req, res) => {
       });
     }
     config.phase = 'planning';
+    config.onboardingStep = 2; // Move to step 2 (selection)
     storage.writeConfig(config);
 
-    // 1. Sprout spec sections using AI
-    const sprouted = await orchestrator.runIntakeSprout(config);
+    // 1. Sprout three distinct planning options using AI
+    const proposals = await orchestrator.runIntakeDivergence(config, feedback);
+
+    // Save proposals and update config
+    storage.writeProposals(proposals);
+    config.proposals = proposals;
+    storage.writeConfig(config);
+
+    res.json({
+      success: true,
+      config,
+      proposals
+    });
+  } catch (error: any) {
+    console.error('Intake Propose API Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 12.5. Confirm Chosen Option and Sprout Core Spec + Features
+app.post('/api/project/intake/select', async (req, res) => {
+  try {
+    const { selectedOptionKey, userAdjustments } = req.body;
+    if (!selectedOptionKey || !['A', 'B', 'C'].includes(selectedOptionKey)) {
+      return res.status(400).json({ error: 'Valid selectedOptionKey (A, B, or C) is required' });
+    }
+
+    const config = storage.readConfig();
+    const proposals = storage.readProposals();
+    if (!proposals) {
+      return res.status(400).json({ error: 'No active proposals found. Please run intake/propose first.' });
+    }
+
+    const chosenOption = proposals.options[selectedOptionKey as 'A' | 'B' | 'C'];
+    config.selectedOptionKey = selectedOptionKey;
+    config.onboardingStep = 3;
+    storage.writeConfig(config);
+
+    // 1. Sprout spec sections using AI, conforming to chosen option and custom adjustments
+    const sprouted = await orchestrator.runIntakeSprout(config, chosenOption, userAdjustments);
 
     // Save core spec
     const now = new Date().toISOString();
@@ -313,6 +327,10 @@ app.post('/api/project/intake', async (req, res) => {
     const markdown = SpecCompiler.compile(config, allSections);
     storage.writeCompiledSpec(markdown);
 
+    // Set sprouted true
+    config.sprouted = true;
+    storage.writeConfig(config);
+
     res.json({
       success: true,
       config,
@@ -320,7 +338,7 @@ app.post('/api/project/intake', async (req, res) => {
       decisions
     });
   } catch (error: any) {
-    console.error('Intake API Error:', error);
+    console.error('Intake Select API Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

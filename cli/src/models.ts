@@ -36,6 +36,34 @@ export interface AgentSetting {
   model: string;
 }
 
+export interface IntakeOption {
+  key: 'A' | 'B' | 'C';
+  title: string;
+  objective: string;
+  coreUser: string;
+  scope: string[];
+  pros: string[];
+  cons: string[];
+  recommendedScenario: string;
+}
+
+export interface DirectorRecommendation {
+  recommendedOption: 'A' | 'B' | 'C';
+  reason: string;
+  discardedOptions: string;
+  combinedElements?: string;
+  userDecisionsRequired: string[];
+}
+
+export interface IntakeProposals {
+  options: {
+    A: IntakeOption;
+    B: IntakeOption;
+    C: IntakeOption;
+  };
+  recommendation: DirectorRecommendation;
+}
+
 export interface ProjectConfig {
   sprouted?: boolean;
   projectName: string;
@@ -60,6 +88,9 @@ export interface ProjectConfig {
     verifyCommand: string;
     uiCheckCommand: string;
   };
+  proposals?: IntakeProposals;
+  selectedOptionKey?: 'A' | 'B' | 'C' | 'custom';
+  onboardingStep?: number;
 }
 
 export interface NodeMessage {
@@ -75,3 +106,4 @@ export interface ProjectStateData {
   decisions: DecisionCard[];
   messages: NodeMessage[];
 }
+
