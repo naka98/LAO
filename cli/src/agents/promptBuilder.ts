@@ -179,6 +179,7 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     config: ProjectConfig;
     sections: SpecSection[];
     chatHistory: NodeMessage[];
+    userMessage: string;
   }): string {
     let roleDescription = '';
     if (params.agentType === 'specifier') {
@@ -223,6 +224,9 @@ Respond with:
 ${specsBlock}
 
 ${historyBlock}
+
+## Client's Latest Message
+${params.userMessage}
 `;
   }
 

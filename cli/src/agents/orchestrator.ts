@@ -239,7 +239,8 @@ export class AgentOrchestrator {
       agentType: route,
       config: params.config,
       sections: params.sections,
-      chatHistory: params.chatHistory
+      chatHistory: params.chatHistory,
+      userMessage: params.userMessage
     });
 
     const responseRaw = await this.geminiClient.generateText({
