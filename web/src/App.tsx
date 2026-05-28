@@ -17,9 +17,27 @@ import {
   GitBranch,
   BookOpen,
   ArrowRight,
-  Globe
+  Globe,
+  ListTodo,
+  RotateCw
 } from 'lucide-react';
-import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules } from './types';
+import type { SpecSection, DecisionCard, NodeMessage, ProjectConfig, GoldenRules, TaskItem } from './types';
+import { marked } from 'marked';
+import mermaid from 'mermaid';
+
+marked.use({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    code(token) {
+      const { text, lang } = token;
+      if (lang === 'mermaid') {
+        return `<div class="mermaid">${text}</div>`;
+      }
+      return `<pre class="bg-slate-950 p-4 rounded-xl border border-slate-900 font-mono text-xs overflow-x-auto text-slate-350 my-4"><code class="language-${lang || ''}">${text}</code></pre>`;
+    }
+  }
+});
 
 const translations = {
   en: {
@@ -94,6 +112,18 @@ const translations = {
     toastGapCompleted: "Gap Audit completed successfully.",
     toastGapFailed: "Gap Audit failed",
     toastSpecLockedWarning: "Specifications are locked during development phase",
+    tasksTitle: "Implementation Checklist",
+    generateTasksBtn: "Regenerate Checklist",
+    noTasks: "No implementation tasks generated yet.",
+    toastTasksGenerated: "Checklist generated successfully from specification!",
+    toastTaskUpdated: "Task status updated.",
+    previewTab: "Preview",
+    errorExplanationTitle: "AI Debugging Assistant",
+    previewUrlPlaceholder: "Preview URL (e.g. http://localhost:3050)",
+    importPrdBtn: "Import PRD File (.md, .txt)",
+    toastPrdLoaded: "PRD file loaded successfully.",
+    toastPrdLoadFailed: "Failed to read PRD file.",
+    toastPrdTypeWarning: "Only text or markdown files (.md, .txt) are supported.",
   },
   ko: {
     projectNamePlaceholder: "예: 로컬 데이터베이스 웹 UI",
@@ -167,6 +197,18 @@ const translations = {
     toastGapCompleted: "기획 감사가 성공적으로 완료되었습니다.",
     toastGapFailed: "기획 감사 실행에 실패했습니다.",
     toastSpecLockedWarning: "개발 단계 중에는 기획서를 수정할 수 없습니다.",
+    tasksTitle: "구현 태스크 체크리스트",
+    generateTasksBtn: "체크리스트 재생성",
+    noTasks: "생성된 구현 태스크가 없습니다.",
+    toastTasksGenerated: "명세서로부터 구현 태스크를 성공적으로 생성했습니다!",
+    toastTaskUpdated: "태스크 상태가 업데이트되었습니다.",
+    previewTab: "미리보기",
+    errorExplanationTitle: "AI 오류 분석 및 대처 가이드",
+    previewUrlPlaceholder: "미리보기 URL (예: http://localhost:3000)",
+    importPrdBtn: "PRD 파일 불러오기 (.md, .txt)",
+    toastPrdLoaded: "PRD 파일을 성공적으로 불러왔습니다.",
+    toastPrdLoadFailed: "PRD 파일을 읽는데 실패했습니다.",
+    toastPrdTypeWarning: "텍스트 또는 마크다운 파일(.md, .txt)만 불러올 수 있습니다.",
   }
 };
 
@@ -186,8 +228,16 @@ export default function App() {
   const [criteriaMarkdown, setCriteriaMarkdown] = useState<string>('');
   const [gapReview, setGapReview] = useState<string>('');
 
+  // Checklist States
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
+  const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
+
   // UI States
-  const [activeTab, setActiveTab] = useState<'spec' | 'devloop' | 'timeline' | 'gaps'>('spec');
+  const [activeTab, setActiveTab] = useState<'spec' | 'devloop' | 'preview' | 'timeline' | 'gaps'>('spec');
+  const [previewUrl, setPreviewUrl] = useState('http://localhost:3000');
+  const [devLoopExplanation, setDevLoopExplanation] = useState<string | null>(null);
+
+
   const [chatMessage, setChatMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
@@ -204,6 +254,8 @@ export default function App() {
     database: 'SQLite',
     additional: 'RESTful API structure, zero Docker dependencies'
   });
+  const [intakeProvider, setIntakeProvider] = useState('gemini');
+  const [intakeModel, setIntakeModel] = useState('');
 
   // Settings Modal States
   const [showSettings, setShowSettings] = useState(false);
@@ -220,9 +272,37 @@ export default function App() {
 
   // Routing and SSE stream states
   const [routingStatus, setRoutingStatus] = useState<{ isRouting: boolean; route?: string; reasoning?: string }>({ isRouting: false });
+  const [isMockupUpdating, setIsMockupUpdating] = useState(false);
+  const [iframeKey, setIframeKey] = useState(0);
   const activeEventSourceRef = useRef<EventSource | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Initialize mermaid on mount
+  useEffect(() => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'dark',
+      securityLevel: 'loose',
+    });
+  }, []);
+
+  // Run mermaid rendering after state updates
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      mermaid.run().catch(err => console.warn('Mermaid rendering error:', err));
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [sections, activeTab, criteriaMarkdown, gapReview, editingSectionId]);
+
+  // Markdown rendering helper
+  const renderMarkdown = (content: string) => {
+    try {
+      return { __html: String(marked.parse(content || '')) };
+    } catch (e) {
+      return { __html: content || '' };
+    }
+  };
 
   // 1. Initial Load
   useEffect(() => {
@@ -247,13 +327,26 @@ export default function App() {
         setConfig(configData);
         setFormConfig(configData);
         
+        // Sync intake wizard settings
+        if (configData.settings) {
+          if (configData.settings.provider) setIntakeProvider(configData.settings.provider);
+          if (configData.settings.model !== undefined) setIntakeModel(configData.settings.model);
+        }
+        if (configData.goldenRules) {
+          setIntakeGoldenRules(configData.goldenRules);
+        }
+        if (configData.automationLevel) {
+          setIntakeLevel(configData.automationLevel);
+        }
+        
         if (configData.projectName) {
-          // Fetch specs, decisions, criteria, messages
-          const [resSpecs, resDecs, resCriteria, resMessages] = await Promise.all([
+          // Fetch specs, decisions, criteria, messages, tasks
+          const [resSpecs, resDecs, resCriteria, resMessages, resTasks] = await Promise.all([
             fetch('/api/specs'),
             fetch('/api/decisions'),
             fetch('/api/criteria'),
-            fetch('/api/messages')
+            fetch('/api/messages'),
+            fetch('/api/tasks')
           ]);
 
           if (resSpecs.ok) setSections(await resSpecs.json());
@@ -263,6 +356,10 @@ export default function App() {
             setCriteriaMarkdown(data.markdown);
           }
           if (resMessages.ok) setMessages(await resMessages.json());
+          if (resTasks.ok) {
+            const data = await resTasks.json();
+            setTasks(data.parsed || []);
+          }
 
           // Trigger compilation
           compileSpecs();
@@ -286,6 +383,31 @@ export default function App() {
     }
   };
 
+  // File Import handler
+  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isText = file.name.endsWith('.md') || file.name.endsWith('.txt') || file.type.startsWith('text/');
+    if (!isText) {
+      showToast(t.toastPrdTypeWarning, 'warning');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === 'string') {
+        setIntakeDesc(text);
+        showToast(t.toastPrdLoaded, 'success');
+      }
+    };
+    reader.onerror = () => {
+      showToast(t.toastPrdLoadFailed, 'error');
+    };
+    reader.readAsText(file);
+  };
+
   // 2. Intake Sprouting
   const handleIntakeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -301,7 +423,9 @@ export default function App() {
           projectName: intakeProjectName,
           projectDesc: intakeDesc,
           automationLevel: intakeLevel,
-          goldenRules: intakeGoldenRules
+          goldenRules: intakeGoldenRules,
+          provider: intakeProvider,
+          model: intakeModel
         })
       });
 
@@ -393,9 +517,52 @@ export default function App() {
             : t.toastUnlocked,
           'success'
         );
+        if (data.tasksGenerated) {
+          showToast(t.toastTasksGenerated, 'success');
+        }
+        fetchProjectData();
       }
     } catch (e) {
       showToast('Failed to change phase lock', 'error');
+    }
+  };
+
+  // Toggle checklist task status
+  const handleToggleTask = async (index: number, currentStatus: 'todo' | 'in_progress' | 'done') => {
+    let nextStatus = 'todo';
+    if (currentStatus === 'todo') nextStatus = 'in_progress';
+    else if (currentStatus === 'in_progress') nextStatus = 'done';
+    
+    try {
+      const res = await fetch('/api/tasks/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ index, status: nextStatus })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.parsed || []);
+        showToast(t.toastTaskUpdated, 'success');
+      }
+    } catch (e) {
+      showToast('Failed to update task status', 'error');
+    }
+  };
+
+  // Generate / Regenerate checklist tasks manually
+  const handleGenerateTasks = async () => {
+    setIsGeneratingTasks(true);
+    try {
+      const res = await fetch('/api/tasks/generate', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setTasks(data.parsed || []);
+        showToast(t.toastTasksGenerated, 'success');
+      }
+    } catch (e) {
+      showToast('Failed to generate tasks', 'error');
+    } finally {
+      setIsGeneratingTasks(false);
     }
   };
 
@@ -460,6 +627,8 @@ export default function App() {
             reasoning: data.reasoning
           });
           currentAgent = data.route;
+        } else if (data.type === 'mockup_updating') {
+          setIsMockupUpdating(true);
         } else if (data.type === 'content') {
           setRoutingStatus(prev => ({ ...prev, isRouting: false }));
           incomingProse += data.chunk || '';
@@ -480,11 +649,14 @@ export default function App() {
           eventSource.close();
           setIsSending(false);
           setRoutingStatus({ isRouting: false });
+          setIsMockupUpdating(false);
+          setIframeKey(prev => prev + 1);
           fetchProjectData(); // Reload full states (spec, features, messages)
         } else if (data.type === 'error') {
           eventSource.close();
           setIsSending(false);
           setRoutingStatus({ isRouting: false });
+          setIsMockupUpdating(false);
           showToast(`Agent error: ${data.error}`, 'error');
         }
       } catch (e) {
@@ -496,6 +668,7 @@ export default function App() {
       eventSource.close();
       setIsSending(false);
       setRoutingStatus({ isRouting: false });
+      setIsMockupUpdating(false);
       showToast('SSE connection closed or lost', 'error');
     };
   };
@@ -503,6 +676,7 @@ export default function App() {
   // 8. Run DevLoop command
   const runDevCommand = (kind: 'build' | 'launch' | 'verify') => {
     setConsoleLogs([]);
+    setDevLoopExplanation(null);
     setActiveDevCommand(kind);
     setActiveTab('devloop');
 
@@ -518,6 +692,8 @@ export default function App() {
           setConsoleLogs(prev => [...prev, { type: 'stdout', text: data.chunk }]);
         } else if (data.type === 'stderr') {
           setConsoleLogs(prev => [...prev, { type: 'stderr', text: data.chunk }]);
+        } else if (data.type === 'explanation') {
+          setDevLoopExplanation(data.text);
         } else if (data.type === 'exit') {
           setConsoleLogs(prev => [...prev, { type: 'info', text: `\nProcess completed with exit code: ${data.code}` }]);
           eventSource.close();
@@ -558,11 +734,251 @@ export default function App() {
     }
   };
 
+  // Render Settings Modal Helper
+  const renderSettingsModal = () => {
+    if (!showSettings || !formConfig) return null;
+    return (
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+        <form onSubmit={saveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl relative my-auto text-xs">
+          <button
+            type="button"
+            onClick={() => setShowSettings(false)}
+            className="absolute top-4 right-4 p-1.5 bg-slate-950 border border-slate-855 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200"
+          >
+            <X className="w-4 h-4" />
+          </button>
+
+          {/* Modal Heading */}
+          <div className="flex items-center gap-2.5 mb-5">
+            <Settings className="w-5 h-5 text-violet-400" />
+            <h2 className="text-base font-bold text-slate-100">{t.projectConfigTitle}</h2>
+          </div>
+
+          {/* Tab selection */}
+          <div className="flex gap-2 border-b border-slate-850 mb-4 text-xs font-semibold">
+            {[
+              { id: 'global', label: t.globalPresetsTab },
+              { id: 'agents', label: t.agentConfigTab },
+              { id: 'devloop', label: t.devloopCommandsTab }
+            ].map(tabOpt => (
+              <button
+                key={tabOpt.id}
+                type="button"
+                onClick={() => setSettingsTab(tabOpt.id as any)}
+                className={`pb-2 px-1 border-b-2 transition-all ${
+                  settingsTab === tabOpt.id
+                    ? 'border-violet-500 text-slate-200'
+                    : 'border-transparent text-slate-500 hover:text-slate-350'
+                }`}
+              >
+                {tabOpt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+            {/* Tab Content: Global Settings */}
+            {settingsTab === 'global' && (
+              <div className="space-y-3.5 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.globalProviderLabel}</label>
+                  <select
+                    value={formConfig.settings.provider}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      settings: { ...prev!.settings, provider: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="gemini">Gemini CLI</option>
+                    <option value="claude">Claude CLI</option>
+                    <option value="codex">Codex CLI</option>
+                    <option value="agy">Antigravity CLI (agy)</option>
+                    <option value="cursor">Cursor Agent CLI (cursor)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.modelOverrideLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.settings.model}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      settings: { ...prev!.settings, model: e.target.value }
+                    }))}
+                    placeholder="e.g. gemini-1.5-pro"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 placeholder-slate-650 focus:outline-none"
+                  />
+                </div>
+
+                <div className="border-t border-slate-850 pt-3">
+                  <label className="block font-semibold text-slate-300 mb-2">{t.goldenRulesTitle}</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.frontendLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.frontend}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, frontend: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.backendLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.backend}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, backend: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.databaseLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.database}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, database: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.additionalLabel}</label>
+                      <input
+                        type="text"
+                        value={formConfig.goldenRules.additional}
+                        onChange={e => setFormConfig(prev => ({
+                          ...prev!,
+                          goldenRules: { ...prev!.goldenRules, additional: e.target.value }
+                        }))}
+                        className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Tab Content: Agent Customization */}
+            {settingsTab === 'agents' && (
+              <div className="space-y-3 text-xs">
+                {Object.keys(formConfig.settings.agents).map(roleKey => {
+                  const typedKey = roleKey as keyof typeof formConfig.settings.agents;
+                  return (
+                    <div key={roleKey} className="flex items-center justify-between border-b border-slate-850 pb-2.5">
+                      <span className="font-bold text-slate-300 capitalize">{roleKey} {t.agentRoleLabel}</span>
+                      <div className="flex gap-2">
+                        <select
+                          value={formConfig.settings.agents[typedKey].provider}
+                          onChange={e => setFormConfig(prev => {
+                            const agents = { ...prev!.settings.agents };
+                            agents[typedKey] = { ...agents[typedKey], provider: e.target.value };
+                            return { ...prev!, settings: { ...prev!.settings, agents } };
+                          })}
+                          className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300"
+                        >
+                          <option value="gemini">Gemini</option>
+                          <option value="claude">Claude</option>
+                          <option value="codex">Codex</option>
+                          <option value="agy">Antigravity (agy)</option>
+                          <option value="cursor">Cursor Agent</option>
+                        </select>
+                        <input
+                          type="text"
+                          value={formConfig.settings.agents[typedKey].model}
+                          onChange={e => setFormConfig(prev => {
+                            const agents = { ...prev!.settings.agents };
+                            agents[typedKey] = { ...agents[typedKey], model: e.target.value };
+                            return { ...prev!, settings: { ...prev!.settings, agents } };
+                          })}
+                          placeholder={t.defaultModelPlaceholder}
+                          className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 w-32 placeholder-slate-650"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Tab Content: DevLoop commands */}
+            {settingsTab === 'devloop' && (
+              <div className="space-y-3 text-xs">
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.buildCommandLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.developerLoop.buildCommand}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      developerLoop: { ...prev!.developerLoop, buildCommand: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.verifyCommandLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.developerLoop.verifyCommand}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      developerLoop: { ...prev!.developerLoop, verifyCommand: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-400 mb-1">{t.launchCommandLabel}</label>
+                  <input
+                    type="text"
+                    value={formConfig.developerLoop.launchCommand}
+                    onChange={e => setFormConfig(prev => ({
+                      ...prev!,
+                      developerLoop: { ...prev!.developerLoop, launchCommand: e.target.value }
+                    }))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 border-t border-slate-850 pt-4 mt-5 text-xs">
+            <button
+              type="button"
+              onClick={() => setShowSettings(false)}
+              className="px-4 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl font-bold text-slate-450"
+            >
+              {t.closeBtn}
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold"
+            >
+              {t.saveConfigBtn}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  };
+
   // Render Loader screen during initialization
   if (isInitializing) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start md:justify-center text-slate-100 p-6 overflow-y-auto">
-        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden my-auto">
+      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+        <div className="bg-slate-900/60 backdrop-blur-xl border border-slate-800 p-8 rounded-2xl max-w-md w-full text-center shadow-2xl relative overflow-hidden my-auto shrink-0">
           <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-emerald-500/10 animate-pulse pointer-events-none" />
           <Loader2 className="w-12 h-12 text-violet-500 animate-spin mx-auto mb-6" />
           <h2 className="text-xl font-bold text-slate-200 mb-2">{t.loadingSpecs}</h2>
@@ -575,10 +991,19 @@ export default function App() {
   // Render Intake Wizard if no active project config exists
   if (!config || !config.sprouted) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
-        {/* Language switcher on top right */}
+      <div className="h-screen w-full bg-slate-950 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
+        {/* Language switcher & Settings on top right */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-350 transition-colors"
+          >
+            <Settings className="w-3.5 h-3.5" />
+            {lang === 'ko' ? '환경설정' : 'Settings'}
+          </button>
+          <button
+            type="button"
             onClick={() => setLang(lang === 'ko' ? 'en' : 'ko')}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900/80 border border-slate-800 hover:bg-slate-800 rounded-xl text-xs font-bold text-slate-350 transition-colors"
           >
@@ -588,7 +1013,7 @@ export default function App() {
         </div>
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.25),rgba(255,255,255,0))]" />
         
-        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto">
+        <form onSubmit={handleIntakeSubmit} className="relative bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 max-w-2xl w-full shadow-2xl overflow-hidden my-auto shrink-0">
           <div className="absolute top-0 right-0 w-64 h-64 bg-violet-600/10 rounded-full blur-3xl pointer-events-none" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -620,7 +1045,25 @@ export default function App() {
 
             {/* Rough Idea */}
             <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">{t.roughIdeaLabel}</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400">{t.roughIdeaLabel}</label>
+                <div className="flex items-center">
+                  <input
+                    type="file"
+                    id="prd-file-upload"
+                    accept=".md,.txt"
+                    className="hidden"
+                    onChange={handleFileImport}
+                  />
+                  <label
+                    htmlFor="prd-file-upload"
+                    className="cursor-pointer flex items-center gap-1 px-2.5 py-1 bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-lg text-[9px] font-bold text-violet-400 hover:text-violet-300 transition-colors"
+                  >
+                    <FileText className="w-3 h-3" />
+                    {t.importPrdBtn}
+                  </label>
+                </div>
+              </div>
               <textarea
                 id="project-desc-input"
                 placeholder={t.roughIdeaPlaceholder}
@@ -724,6 +1167,8 @@ export default function App() {
             {errorToast.message}
           </div>
         )}
+        {/* Settings Modal (Intake Wizard view) */}
+        {renderSettingsModal()}
       </div>
     );
   }
@@ -796,51 +1241,112 @@ export default function App() {
       {/* Main split-screen panel */}
       <main className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
         {/* Left Side: Wizard / Decision Cards deck & Chat */}
-        <div className="w-full md:w-2/5 flex-none md:flex-initial border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-visible md:overflow-y-auto min-h-[450px] md:min-h-0">
+        <div className="w-full md:w-2/5 flex-none md:flex-none border-b md:border-b-0 md:border-r border-slate-900 bg-slate-950/20 flex flex-col p-6 space-y-6 overflow-y-visible md:overflow-y-auto min-h-[450px] md:min-h-0">
           {/* 1. Decision Card Section */}
-          <div className="flex-none">
-            <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
-              <GitBranch className="w-4 h-4 text-violet-400" />
-              {t.decisionCardsDeck} ({pendingDecisions.length})
-            </span>
+          {config.phase === 'development' ? (
+            /* Implementation Checklist Panel */
+            <div className="flex-none flex flex-col bg-slate-900/10 border border-slate-900 rounded-2xl p-5 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+              <div className="flex items-center justify-between mb-4 border-b border-slate-900 pb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-350 flex items-center gap-1.5">
+                  <ListTodo className="w-4 h-4 text-emerald-400 animate-pulse" />
+                  {t.tasksTitle}
+                </span>
+                
+                <button
+                  type="button"
+                  onClick={handleGenerateTasks}
+                  disabled={isGeneratingTasks}
+                  className="px-2 py-1 bg-slate-950 border border-slate-850 hover:bg-slate-800 rounded-lg text-[9px] text-slate-450 font-bold transition-all disabled:opacity-50"
+                >
+                  {isGeneratingTasks ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : t.generateTasksBtn}
+                </button>
+              </div>
 
-            {pendingDecisions.length > 0 ? (
-              <div className="space-y-4">
-                {pendingDecisions.map(card => (
-                  <div
-                    key={card.id}
-                    className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 relative overflow-hidden transition-all hover:border-slate-700"
-                  >
-                    <div className="absolute top-0 right-0 px-2 py-0.5 bg-violet-600/20 text-violet-400 rounded-bl-lg text-[9px] uppercase font-bold tracking-wider">
-                      {card.section}
+              {tasks.length > 0 ? (
+                <div className="space-y-2.5 max-h-[300px] overflow-y-auto pr-1">
+                  {tasks.map(task => (
+                    <button
+                      key={task.index}
+                      type="button"
+                      onClick={() => handleToggleTask(task.index, task.status)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all text-xs flex items-start gap-2.5 ${
+                        task.status === 'done'
+                          ? 'bg-slate-950/40 border-slate-900/60 text-slate-550 line-through'
+                          : task.status === 'in_progress'
+                          ? 'bg-slate-900/60 border-violet-900/50 text-slate-200 border-l-2 border-l-violet-500 shadow-md shadow-violet-500/5'
+                          : 'bg-slate-950 border-slate-855 hover:bg-slate-900/40 text-slate-300'
+                      }`}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        {task.status === 'done' ? (
+                          <div className="w-4 h-4 rounded bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                            <Check className="w-2.5 h-2.5 text-emerald-400" />
+                          </div>
+                        ) : task.status === 'in_progress' ? (
+                          <div className="w-4 h-4 rounded bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
+                            <Loader2 className="w-2.5 h-2.5 text-violet-400 animate-spin" />
+                          </div>
+                        ) : (
+                          <div className="w-4 h-4 rounded bg-slate-950 border border-slate-800" />
+                        )}
+                      </div>
+                      <span className="leading-normal">{task.text}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-xs text-slate-555 italic">
+                  {t.noTasks}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-none">
+              <span className="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+                <GitBranch className="w-4 h-4 text-violet-400" />
+                {t.decisionCardsDeck} ({pendingDecisions.length})
+              </span>
+
+              {pendingDecisions.length > 0 ? (
+                <div className="space-y-4">
+                  {pendingDecisions.map(card => (
+                    <div
+                      key={card.id}
+                      className="bg-slate-900/50 border border-slate-800/80 rounded-2xl p-5 relative overflow-hidden transition-all hover:border-slate-700"
+                    >
+                      <div className="absolute top-0 right-0 px-2 py-0.5 bg-violet-600/20 text-violet-400 rounded-bl-lg text-[9px] uppercase font-bold tracking-wider">
+                        {card.section}
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-200 mb-1.5 pr-14">{card.title}</h3>
+                      
+                      {/* Alternatives list */}
+                      <div className="space-y-2 mt-3">
+                        {card.options.map(opt => (
+                          <button
+                            key={opt.name}
+                            type="button"
+                            onClick={() => handleResolveDecision(card.id, opt.name)}
+                            className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900/60 p-3 rounded-xl text-left transition-colors border-l-2 hover:border-l-violet-500"
+                          >
+                            <span className="block text-xs font-bold text-slate-300 flex items-center justify-between">
+                              {opt.name}
+                              <ArrowRight className="w-3 h-3 text-slate-500" />
+                            </span>
+                            <span className="block text-[10px] text-slate-505 mt-1">{opt.desc}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <h3 className="text-sm font-bold text-slate-200 mb-1.5 pr-14">{card.title}</h3>
-                    
-                    {/* Alternatives list */}
-                    <div className="space-y-2 mt-3">
-                      {card.options.map(opt => (
-                        <button
-                          key={opt.name}
-                          onClick={() => handleResolveDecision(card.id, opt.name)}
-                          className="w-full bg-slate-950 border border-slate-850 hover:bg-slate-900/60 p-3 rounded-xl text-left transition-colors border-l-2 hover:border-l-violet-500"
-                        >
-                          <span className="block text-xs font-bold text-slate-300 flex items-center justify-between">
-                            {opt.name}
-                            <ArrowRight className="w-3 h-3 text-slate-500" />
-                          </span>
-                          <span className="block text-[10px] text-slate-500 mt-1">{opt.desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-6 text-center text-xs text-slate-500">
-                {t.allResolved}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-slate-900/20 border border-slate-900 rounded-2xl p-6 text-center text-xs text-slate-500">
+                  {t.allResolved}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 2. Interactive Agent Chat Widget */}
           <div className="flex-1 flex flex-col bg-slate-900/30 border border-slate-900 rounded-2xl overflow-visible md:overflow-hidden min-h-[350px]">
@@ -853,13 +1359,16 @@ export default function App() {
 
               {/* Streaming routing chip */}
               {routingStatus.isRouting && (
-                <div className="text-[10px] text-violet-400 animate-pulse bg-violet-950/20 border border-violet-850 px-2 py-0.5 rounded-full">
-                  {t.directorRouting}
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-violet-500/10 border border-violet-500/20 text-violet-400 rounded-full text-[10px] font-semibold animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                  <span>{t.directorRouting}</span>
                 </div>
               )}
               {routingStatus.route && (
-                <div className="text-[10px] text-emerald-400 bg-emerald-950/20 border border-emerald-850 px-2 py-0.5 rounded-full capitalize">
-                  {routingStatus.route} {t.responding}
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-450 animate-ping" />
+                  <span className="capitalize">{routingStatus.route}</span>
+                  <span className="opacity-75">{t.responding}</span>
                 </div>
               )}
             </div>
@@ -879,15 +1388,30 @@ export default function App() {
                     <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 capitalize">
                       {msg.author === 'user' ? 'You' : msg.author}
                     </span>
-                    <div className={`p-3 rounded-2xl ${
-                      msg.author === 'user'
-                        ? 'bg-violet-600 text-white rounded-tr-none'
-                        : 'bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80'
-                    }`}>
-                      {msg.content}
-                    </div>
+                    {msg.author === 'user' ? (
+                      <div className="p-3 rounded-2xl bg-violet-600 text-white rounded-tr-none whitespace-pre-wrap">
+                        {msg.content}
+                      </div>
+                    ) : (
+                      <div 
+                        className="p-3 rounded-2xl bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80 markdown-content w-full"
+                        dangerouslySetInnerHTML={renderMarkdown(msg.content)}
+                      />
+                    )}
                   </div>
                 ))
+              )}
+              {isSending && messages.length > 0 && messages[messages.length - 1].author === 'user' && (
+                <div className="flex flex-col items-start max-w-[85%] mr-auto animate-fade-in">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 capitalize">
+                    {routingStatus.route || 'Agent'}
+                  </span>
+                  <div className="p-3 rounded-2xl bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80 flex items-center gap-1 px-4">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
               )}
               <div ref={chatEndRef} />
             </div>
@@ -914,13 +1438,14 @@ export default function App() {
         </div>
 
         {/* Right Side: Document Tabs Workspace */}
-        <div className="w-full md:w-auto flex-none md:flex-1 flex flex-col bg-slate-950 min-h-[550px] md:min-h-0">
+        <div className="w-full md:w-auto flex-none md:flex-1 md:min-w-0 flex flex-col bg-slate-950 min-h-[550px] md:min-h-0">
           {/* Tab buttons */}
           <div className="bg-slate-950/40 border-b border-slate-900 px-6 py-2 flex items-center justify-between">
             <div className="flex gap-4">
               {[
                 { id: 'spec', label: t.compiledSpecTab, icon: FileText },
                 { id: 'devloop', label: t.devloopConsoleTab, icon: Terminal },
+                { id: 'preview', label: t.previewTab, icon: Globe },
                 { id: 'timeline', label: t.decisionTimelineTab, icon: BookOpen },
                 { id: 'gaps', label: t.gapAuditorTab, icon: AlertTriangle }
               ].map(tab => {
@@ -955,7 +1480,7 @@ export default function App() {
           </div>
 
           {/* Tab Contents */}
-          <div className="flex-1 overflow-y-visible md:overflow-y-auto p-6">
+          <div className="flex-1 overflow-x-auto overflow-y-visible md:overflow-y-auto p-6">
             
             {/* A. Live Compiled Spec Viewer */}
             {activeTab === 'spec' && (
@@ -1011,11 +1536,10 @@ export default function App() {
                     ) : (
                       <div
                         onDoubleClick={() => handleStartEditing(section)}
-                        className="text-xs text-slate-400 leading-relaxed font-mono whitespace-pre-wrap select-text cursor-pointer hover:bg-slate-900/10 p-2 rounded-lg"
+                        className="text-xs text-slate-300 leading-relaxed select-text cursor-pointer hover:bg-slate-900/10 p-4 rounded-xl border border-slate-900 bg-slate-950/20 markdown-content"
                         title="Double click to edit spec"
-                      >
-                        {section.content || t.noContent}
-                      </div>
+                        dangerouslySetInnerHTML={renderMarkdown(section.content || t.noContent)}
+                      />
                     )}
                   </div>
                 ))}
@@ -1023,54 +1547,152 @@ export default function App() {
             )}
 
             {/* B. DevLoop Console Tab */}
-            {activeTab === 'devloop' && (
-              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
-                {/* Console actions */}
-                <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2">
-                  <button
-                    onClick={() => runDevCommand('build')}
-                    disabled={activeDevCommand !== null}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5 text-violet-400" />
-                    {t.runBuildBtn}
-                  </button>
-                  <button
-                    onClick={() => runDevCommand('verify')}
-                    disabled={activeDevCommand !== null}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
-                  >
-                    <Check className="w-3.5 h-3.5 text-emerald-400" />
-                    {t.runVerifyBtn}
-                  </button>
-                  <button
-                    onClick={() => runDevCommand('launch')}
-                    disabled={activeDevCommand !== null}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                    {t.launchServerBtn}
-                  </button>
-                </div>
+            {activeTab === 'devloop' && config?.phase === 'development' && (
+              <div className="space-y-4 max-w-4xl mx-auto h-full flex flex-col">
+                {/* AI Error Explanation Alert Card */}
+                {devLoopExplanation && (
+                  <div className="bg-red-950/30 border border-red-900/50 rounded-2xl p-5 relative overflow-hidden shadow-lg shrink-0">
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-red-500/5 rounded-full blur-3xl pointer-events-none" />
+                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-red-900/20">
+                      <AlertCircle className="w-5 h-5 text-red-400 animate-pulse" />
+                      <span className="text-sm font-bold text-red-200">{t.errorExplanationTitle}</span>
+                    </div>
+                    <div
+                      className="text-xs text-red-350 leading-relaxed select-text markdown-content max-h-[200px] overflow-y-auto"
+                      dangerouslySetInnerHTML={renderMarkdown(devLoopExplanation)}
+                    />
+                  </div>
+                )}
 
-                {/* Logs Screen */}
-                <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text">
-                  {consoleLogs.length === 0 ? (
-                    <div className="text-slate-700 italic">{t.consoleIdle}</div>
-                  ) : (
-                    consoleLogs.map((log, idx) => (
-                      <div
-                        key={idx}
-                        className={`whitespace-pre-wrap ${
-                          log.type === 'stderr' ? 'text-red-400' : log.type === 'info' ? 'text-violet-400 font-bold' : 'text-slate-300'
-                        }`}
-                      >
-                        {log.text}
-                      </div>
-                    ))
-                  )}
-                  <div ref={logsEndRef} />
+                <div className="h-[450px] md:h-full flex-1 flex flex-col border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl">
+                  {/* Console actions */}
+                  <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2">
+                    <button
+                      onClick={() => runDevCommand('build')}
+                      disabled={activeDevCommand !== null}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5 text-violet-400" />
+                      {t.runBuildBtn}
+                    </button>
+                    <button
+                      onClick={() => runDevCommand('verify')}
+                      disabled={activeDevCommand !== null}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5 text-emerald-400" />
+                      {t.runVerifyBtn}
+                    </button>
+                    <button
+                      onClick={() => runDevCommand('launch')}
+                      disabled={activeDevCommand !== null}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 border border-slate-800 hover:bg-slate-800 disabled:opacity-50 text-xs font-bold rounded-lg text-slate-300 transition-colors"
+                    >
+                      <Play className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                      {t.launchServerBtn}
+                    </button>
+                  </div>
+
+                  {/* Logs Screen */}
+                  <div className="flex-1 p-4 bg-black/95 font-mono text-xs text-slate-400 overflow-y-auto leading-relaxed select-text">
+                    {consoleLogs.length === 0 ? (
+                      <div className="text-slate-700 italic">{t.consoleIdle}</div>
+                    ) : (
+                      consoleLogs.map((log, idx) => (
+                        <div
+                          key={idx}
+                          className={`whitespace-pre-wrap ${
+                            log.type === 'stderr' ? 'text-red-400' : log.type === 'info' ? 'text-violet-400 font-bold' : 'text-slate-300'
+                          }`}
+                        >
+                          {log.text}
+                        </div>
+                      ))
+                    )}
+                    <div ref={logsEndRef} />
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* E. Live App Preview Tab */}
+            {activeTab === 'preview' && (
+              <div className="h-[450px] md:h-full flex flex-col max-w-4xl mx-auto border border-slate-900 bg-slate-950/80 rounded-2xl overflow-hidden shadow-2xl animate-fade-in">
+                {/* URL Bar */}
+                <div className="bg-slate-900/40 border-b border-slate-900 px-4 py-3 flex gap-2 items-center justify-between">
+                  <div className="flex items-center gap-2 flex-1">
+                    <Globe className="w-4 h-4 text-violet-400 shrink-0" />
+                    <input
+                      type="text"
+                      value={config?.phase === 'planning' ? '/api/project/mockup' : previewUrl}
+                      onChange={e => setPreviewUrl(e.target.value)}
+                      disabled={config?.phase === 'planning'}
+                      placeholder={t.previewUrlPlaceholder}
+                      className="flex-1 max-w-md bg-slate-950 border border-slate-850 rounded-lg px-3 py-1.5 text-xs text-slate-350 focus:outline-none focus:border-violet-500 font-mono disabled:opacity-70"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setIframeKey(prev => prev + 1)}
+                      title={lang === 'ko' ? '새로고침' : 'Refresh Preview'}
+                      className="p-1.5 hover:bg-slate-800 active:bg-slate-850 border border-slate-850 hover:border-slate-800 rounded-lg text-slate-400 hover:text-slate-200 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                    >
+                      <RotateCw className={`w-3.5 h-3.5 ${isMockupUpdating ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
+                  {config?.phase === 'planning' && (
+                    <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-full text-[10px] font-semibold text-slate-300 shadow-inner shrink-0">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span>{lang === 'ko' ? '기획 시안 프로토타입' : 'Design Prototype'}</span>
+                    </div>
+                  )}
+                </div>
+                {/* Webpage Viewer Frame */}
+                <div className="flex-1 bg-white relative min-h-[400px]">
+                  <iframe
+                    key={iframeKey}
+                    src={config?.phase === 'planning' ? '/api/project/mockup' : previewUrl}
+                    title="App Preview"
+                    className="w-full h-full border-none bg-white"
+                    sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+                  />
+                  {/* Mockup Updating Overlay */}
+                  {isMockupUpdating && (
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm flex flex-col items-center justify-center gap-3 animate-fade-in z-10">
+                      <div className="flex items-center justify-center p-3 bg-slate-900/80 border border-slate-800 rounded-2xl shadow-xl">
+                        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                      </div>
+                      <div className="flex flex-col items-center gap-1 text-center px-4">
+                        <p className="text-sm font-semibold text-slate-200">
+                          {lang === 'ko' ? '시안 업데이트 중...' : 'Updating Mockup...'}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {lang === 'ko' ? 'AI가 기획서 변경사항을 반영하여 시안을 새로 쓰고 있습니다.' : 'AI is rewriting the mockup based on changes.'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Locked State for DevLoop during Planning Phase */}
+            {config?.phase === 'planning' && activeTab === 'devloop' && (
+              <div className="h-[450px] md:h-full flex flex-col items-center justify-center max-w-4xl mx-auto border border-slate-900 bg-slate-950/40 rounded-2xl p-8 text-center relative overflow-hidden shadow-2xl">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_60%_at_50%_50%,rgba(139,92,246,0.05),rgba(255,255,255,0))]" />
+                <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-2xl mb-4 relative">
+                  <Lock className="w-8 h-8 text-violet-400 animate-pulse" />
+                </div>
+                <h3 className="text-base font-bold text-slate-200 mb-2">
+                  {lang === 'ko' ? '개발 단계 전용 기능입니다' : 'Locked in Planning Phase'}
+                </h3>
+                <p className="text-xs text-slate-400 max-w-md leading-relaxed">
+                  {lang === 'ko'
+                    ? '현재는 기획 설계 단계(PLANNING)입니다. 상단의 [개발 단계 전환(기획 잠금)] 버튼을 클릭하여 기획을 확정하고 개발 모드로 전환한 뒤에 코드를 빌드하고 개발 콘솔을 제어해 보세요.'
+                    : 'These engineering tools are locked during the Planning Phase. Click the "Start Development (Lock Spec)" button at the top header to finalize your specifications and unlock local building, testing, and development command control.'}
+                </p>
               </div>
             )}
 
@@ -1078,9 +1700,10 @@ export default function App() {
             {activeTab === 'timeline' && (
               <div className="max-w-2xl mx-auto">
                 {criteriaMarkdown ? (
-                  <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 font-mono text-xs text-slate-400 leading-relaxed select-text whitespace-pre-wrap">
-                    {criteriaMarkdown}
-                  </div>
+                  <div 
+                    className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 text-xs text-slate-350 leading-relaxed select-text markdown-content"
+                    dangerouslySetInnerHTML={renderMarkdown(criteriaMarkdown)}
+                  />
                 ) : (
                   <div className="text-center text-slate-650 py-10">{t.noDecisionLogs}</div>
                 )}
@@ -1098,8 +1721,16 @@ export default function App() {
                   </div>
 
                   {gapReview ? (
-                    <div className="font-mono text-xs text-slate-400 leading-relaxed whitespace-pre-wrap select-text">
-                      {gapReview}
+                    <div 
+                      className="text-xs text-slate-350 leading-relaxed select-text markdown-content"
+                      dangerouslySetInnerHTML={renderMarkdown(gapReview)}
+                    />
+                  ) : isAuditing ? (
+                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                      <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                      <span className="text-xs text-slate-400 font-medium">
+                        {lang === 'ko' ? '기획서 무결성 및 모순 감사 진행 중...' : 'Auditing specifications for gaps & contradictions...'}
+                      </span>
                     </div>
                   ) : (
                     <div className="text-xs text-slate-600 italic">
@@ -1115,239 +1746,7 @@ export default function App() {
       </main>
 
       {/* Settings Modal */}
-      {showSettings && formConfig && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 overflow-y-auto">
-          <form onSubmit={saveSettings} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-xl w-full shadow-2xl relative my-auto">
-            <button
-              type="button"
-              onClick={() => setShowSettings(false)}
-              className="absolute top-4 right-4 p-1.5 bg-slate-950 border border-slate-855 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-200"
-            >
-              <X className="w-4 h-4" />
-            </button>
-
-            {/* Modal Heading */}
-            <div className="flex items-center gap-2.5 mb-5">
-              <Settings className="w-5 h-5 text-violet-400" />
-              <h2 className="text-base font-bold text-slate-100">{t.projectConfigTitle}</h2>
-            </div>
-
-            {/* Tab selection */}
-            <div className="flex gap-2 border-b border-slate-850 mb-4 text-xs font-semibold">
-              {[
-                { id: 'global', label: t.globalPresetsTab },
-                { id: 'agents', label: t.agentConfigTab },
-                { id: 'devloop', label: t.devloopCommandsTab }
-              ].map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => setSettingsTab(t.id as any)}
-                  className={`pb-2 px-1 border-b-2 transition-all ${
-                    settingsTab === t.id
-                      ? 'border-violet-500 text-slate-200'
-                      : 'border-transparent text-slate-500 hover:text-slate-350'
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
-              {/* Tab Content: Global Settings */}
-              {settingsTab === 'global' && (
-                <div className="space-y-3.5 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.globalProviderLabel}</label>
-                    <select
-                      value={formConfig.settings.provider}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        settings: { ...prev!.settings, provider: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 focus:outline-none focus:border-violet-500"
-                    >
-                      <option value="gemini">Gemini CLI</option>
-                      <option value="claude">Claude CLI</option>
-                      <option value="codex">Codex CLI</option>
-                      <option value="agy">Antigravity CLI (agy)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.modelOverrideLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.settings.model}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        settings: { ...prev!.settings, model: e.target.value }
-                      }))}
-                      placeholder="e.g. gemini-1.5-pro"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 placeholder-slate-650 focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="border-t border-slate-850 pt-3">
-                    <label className="block font-semibold text-slate-300 mb-2">{t.goldenRulesTitle}</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.frontendLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.frontend}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, frontend: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.backendLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.backend}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, backend: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.databaseLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.database}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, database: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">{t.additionalLabel}</label>
-                        <input
-                          type="text"
-                          value={formConfig.goldenRules.additional}
-                          onChange={e => setFormConfig(prev => ({
-                            ...prev!,
-                            goldenRules: { ...prev!.goldenRules, additional: e.target.value }
-                          }))}
-                          className="w-full bg-slate-950 border border-slate-855 rounded-lg px-2.5 py-1.5 text-slate-300 text-xs"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab Content: Agent Customization */}
-              {settingsTab === 'agents' && (
-                <div className="space-y-3 text-xs">
-                  {Object.keys(formConfig.settings.agents).map(roleKey => {
-                    const typedKey = roleKey as keyof typeof formConfig.settings.agents;
-                    return (
-                      <div key={roleKey} className="flex items-center justify-between border-b border-slate-850 pb-2.5">
-                        <span className="font-bold text-slate-300 capitalize">{roleKey} {t.agentRoleLabel}</span>
-                        <div className="flex gap-2">
-                          <select
-                            value={formConfig.settings.agents[typedKey].provider}
-                            onChange={e => setFormConfig(prev => {
-                              const agents = { ...prev!.settings.agents };
-                              agents[typedKey] = { ...agents[typedKey], provider: e.target.value };
-                              return { ...prev!, settings: { ...prev!.settings, agents } };
-                            })}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300"
-                          >
-                            <option value="gemini">Gemini</option>
-                            <option value="claude">Claude</option>
-                            <option value="codex">Codex</option>
-                            <option value="agy">Antigravity (agy)</option>
-                          </select>
-                          <input
-                            type="text"
-                            value={formConfig.settings.agents[typedKey].model}
-                            onChange={e => setFormConfig(prev => {
-                              const agents = { ...prev!.settings.agents };
-                              agents[typedKey] = { ...agents[typedKey], model: e.target.value };
-                              return { ...prev!, settings: { ...prev!.settings, agents } };
-                            })}
-                            placeholder={t.defaultModelPlaceholder}
-                            className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 w-32 placeholder-slate-650"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Tab Content: DevLoop commands */}
-              {settingsTab === 'devloop' && (
-                <div className="space-y-3 text-xs">
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.buildCommandLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.developerLoop.buildCommand}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        developerLoop: { ...prev!.developerLoop, buildCommand: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.verifyCommandLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.developerLoop.verifyCommand}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        developerLoop: { ...prev!.developerLoop, verifyCommand: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-semibold text-slate-400 mb-1">{t.launchCommandLabel}</label>
-                    <input
-                      type="text"
-                      value={formConfig.developerLoop.launchCommand}
-                      onChange={e => setFormConfig(prev => ({
-                        ...prev!,
-                        developerLoop: { ...prev!.developerLoop, launchCommand: e.target.value }
-                      }))}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2 border-t border-slate-850 pt-4 mt-5 text-xs">
-              <button
-                type="button"
-                onClick={() => setShowSettings(false)}
-                className="px-4 py-2 bg-slate-950 border border-slate-800 hover:bg-slate-850 rounded-xl font-bold text-slate-450"
-              >
-                {t.closeBtn}
-              </button>
-              <button
-                type="submit"
-                className="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-xl text-white font-bold"
-              >
-                {t.saveConfigBtn}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {renderSettingsModal()}
 
       {/* Floating Toast notification */}
       {errorToast && (

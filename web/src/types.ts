@@ -68,3 +68,9 @@ export interface NodeMessage {
   content: string;
   createdAt: string;
 }
+
+export interface TaskItem {
+  index: number;
+  text: string;
+  status: 'todo' | 'in_progress' | 'done';
+}

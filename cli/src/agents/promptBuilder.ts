@@ -63,16 +63,29 @@ ${params.projectDesc}
 - Database: ${params.goldenRules.database}
 - Additional: ${params.goldenRules.additional}
 
+## Required Sections & Formatting Rules:
+1. **Core Spec (\`coreSpec\`)\**:
+   - MUST contain a \`## Out of Scope (Non-Goals)\` section at the end of the markdown content outlining what features, integrations, or capabilities the MVP will NOT build.
+2. **Feature Content (\`content\` of features)**:
+   - For every feature, the content markdown MUST be structured with:
+     - A \`## User Story\` section formatted as:
+       \`As a [role], I want to [action], so that [benefit].\`
+     - A \`## Acceptance Criteria\` section outlining the scenarios using the Given/When/Then layout, formatted as:
+       \`Scenario: [Scenario description]\`
+       \`Given [context/preconditions]\`
+       \`When [action/trigger]\`
+       \`Then [expected outcome/behavior]\`
+
 ## Output Format
 You must output a single, valid JSON block inside a fenced code block of type \`\`\`json.
 The JSON must match the following TypeScript shape:
 {
-  "coreSpec": "# Core Architecture Specification\\n\\nOutline the system base, tech stack, and structure conforming to the Golden Rules.",
+  "coreSpec": "# Core Architecture Specification\\n\\nOutline the system base, tech stack, and structure conforming to the Golden Rules.\\n\\n## Out of Scope (Non-Goals)\\n- [Exclusion item 1]\\n- [Exclusion item 2]",
   "features": [
     {
       "id": "feature_slug_1",
       "title": "Feature Title 1",
-      "content": "# Feature Requirement Details\\n\\nDescribe user flows, requirements, and interfaces."
+      "content": "# Feature Requirement Details\\n\\n## User Story\\nAs a [user], I want to [action], so that [benefit].\\n\\n## Acceptance Criteria\\nScenario: [Scenario Title]\\nGiven [precondition]\\nWhen [action]\\nThen [result]"
     }
   ]
 }
@@ -166,6 +179,7 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     config: ProjectConfig;
     sections: SpecSection[];
     chatHistory: NodeMessage[];
+    userMessage: string;
   }): string {
     let roleDescription = '';
     if (params.agentType === 'specifier') {
@@ -196,6 +210,10 @@ Respond with:
 }
 \`\`\`
 
+## Formatting Rules for Specification Updates:
+- **Core Spec (core_spec)**: MUST contain a \`## Out of Scope (Non-Goals)\` section at the end of the markdown content.
+- **Feature content**: MUST contain \`## User Story\` (using the \`As a... I want to... So that...\` template) and \`## Acceptance Criteria\` (using the Given/When/Then layout) sections.
+
 ## Golden Rules
 - Frontend: ${params.config.goldenRules.frontend}
 - Backend: ${params.config.goldenRules.backend}
@@ -206,6 +224,45 @@ Respond with:
 ${specsBlock}
 
 ${historyBlock}
+
+## Client's Latest Message
+${params.userMessage}
+`;
+  }
+
+  /**
+   * Prompts the Specifier to draft a step-by-step checklist based on the compiled specs.
+   */
+  public static buildTaskSproutPrompt(params: {
+    projectName: string;
+    projectDesc: string;
+    specsBlock: string;
+  }): string {
+    return `
+You are the **Specifier**. Your job is to take the compiled software specification below and break it down into a highly actionable, step-by-step implementation checklist (task list).
+This task list will guide the AI developer engine and the human developer to implement the project.
+
+## Project Title
+${params.projectName}
+
+## Project Overview
+${params.projectDesc}
+
+## Compiled Specifications
+${params.specsBlock}
+
+## Requirements for Task List:
+1. Break down the project into logical steps, including:
+   - Base workspace preparation / configurations
+   - Database schemas / migrations / storage logic
+   - Backend APIs / controllers / endpoints
+   - Frontend views / components / styling
+   - Verification / testing setup
+2. Each task MUST be formatted as a markdown checkbox:
+   - Use \`- [ ]\` for pending tasks.
+   - Do NOT use \`- [x]\` or others.
+3. Be specific. Name files, API paths, and component names (e.g. \`- [ ] Create user authentication API endpoint in /api/auth/login\` instead of just \`- [ ] Make login\`).
+4. Output ONLY the markdown checklist. Do not include introductory text, conversational greetings, explanations, or code blocks. Just output the checklist lines directly.
 `;
   }
 

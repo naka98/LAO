@@ -148,9 +148,21 @@ export class GeminiClient {
     let schemaFile: string | null = null;
 
     try {
+      // Load RULES.md if it exists in the working directory
+      let finalPrompt = params.prompt;
+      const rulesPath = path.join(process.cwd(), 'RULES.md');
+      if (fs.existsSync(rulesPath)) {
+        try {
+          const rules = fs.readFileSync(rulesPath, 'utf8');
+          finalPrompt += `\n\n## RULES.md (Strict Project Constraints)\n${rules}`;
+        } catch (e) {
+          console.warn('[LAO Core] Failed to read RULES.md', e);
+        }
+      }
+
       // 1. Create temporary file for prompt
       promptFile = path.join(os.tmpdir(), `lao_prompt_${randomUUID()}.txt`);
-      fs.writeFileSync(promptFile, params.prompt, 'utf8');
+      fs.writeFileSync(promptFile, finalPrompt, 'utf8');
 
       // 2. Create temporary file for JSON schema if jsonMode is active
       if (jsonMode && (provider === 'claude' || provider === 'codex')) {
@@ -231,11 +243,36 @@ export class GeminiClient {
         }
         command = baseCmd;
 
+      } else if (provider === 'cursor') {
+        let baseCmd = process.env.LAO_PROVIDER_CURSOR_CLI || 'cursor agent';
+        if (!baseCmd.includes('--yolo') && !baseCmd.includes('-f') && baseCmd.includes('cursor')) {
+          if (baseCmd.includes('agent')) {
+            baseCmd = baseCmd.replace(/\bcursor agent\b/, 'cursor agent --yolo');
+          } else {
+            baseCmd = baseCmd.replace(/\bcursor\b/, 'cursor agent --yolo');
+          }
+        }
+        if (!baseCmd.includes('--print') && !baseCmd.includes('-p')) {
+          baseCmd += ' --print';
+        }
+        if (model && !baseCmd.includes('--model')) {
+          baseCmd += ` --model "${model}"`;
+        }
+        if (jsonMode && !baseCmd.includes('--output-format')) {
+          baseCmd += ' --output-format json';
+        }
+        if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
+          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
+        } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
+          baseCmd += ' "$(cat "$LAO_PROMPT_FILE")"';
+        }
+        command = baseCmd;
+
       } else {
         // default: gemini
         let baseCmd = process.env.LAO_PROVIDER_GEMINI_CLI || 'gemini';
         if (!baseCmd.includes('--yolo') && !baseCmd.includes('--approval-mode') && baseCmd.includes('gemini')) {
-          baseCmd = baseCmd.replace(/\bgemini\b/, 'gemini --yolo --sandbox false');
+          baseCmd = baseCmd.replace(/\bgemini\b/, 'gemini --approval-mode plan --sandbox false');
         }
         if (model && !baseCmd.includes('--model')) {
           baseCmd += ` --model "${model}"`;
@@ -336,7 +373,7 @@ export class GeminiClient {
 
       // 6. Handle schema response extraction for Claude/Gemini CLIs
       if (jsonMode) {
-        if (provider === 'claude') {
+        if (provider === 'claude' || provider === 'cursor') {
           try {
             const parsed = JSON.parse(output);
             if (parsed.structured_output) {

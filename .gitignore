@@ -51,3 +51,10 @@ CLAUDE.md
 *.swp
 *.swo
 *~
+
+# LAO runtime config
+.lao/
+
+# Dependency directories
+node_modules/
+

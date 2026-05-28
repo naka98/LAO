@@ -7,9 +7,10 @@ import { exec, spawn } from 'child_process';
 import { StorageManager } from './storage';
 import { AgentOrchestrator } from './agents/orchestrator';
 import { SpecCompiler } from './compiler';
-import { activeProcesses, getShellInfo } from './gemini';
+import { activeProcesses, getShellInfo, GeminiClient } from './gemini';
 import { randomUUID } from 'crypto';
 import { NodeMessage } from './models';
+import { MockupGenerator } from './agents/mockupGenerator';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -47,7 +48,7 @@ app.post('/api/project/config', (req, res) => {
 });
 
 // 3. Switch Project Phase (Lock/Unlock specs)
-app.post('/api/project/phase', (req, res) => {
+app.post('/api/project/phase', async (req, res) => {
   try {
     const { phase } = req.body;
     if (!phase || !['planning', 'development'].includes(phase)) {
@@ -56,7 +57,19 @@ app.post('/api/project/phase', (req, res) => {
     const config = storage.readConfig();
     config.phase = phase;
     storage.writeConfig(config);
-    res.json({ success: true, config });
+
+    let tasksGenerated = false;
+    if (phase === 'development') {
+      const existingTasks = storage.readTasksRaw();
+      if (!existingTasks.trim()) {
+        const sections = storage.readSpecs();
+        const generatedTasks = await orchestrator.runTaskSprout(config, sections);
+        storage.writeTasksRaw(generatedTasks);
+        tasksGenerated = true;
+      }
+    }
+
+    res.json({ success: true, config, tasksGenerated });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -206,7 +219,7 @@ app.post('/api/specs/compile', (req, res) => {
 // 12. Submit Rough Idea / Intake (Autopilot Sprout)
 app.post('/api/project/intake', async (req, res) => {
   try {
-    const { projectName, projectDesc, automationLevel, goldenRules } = req.body;
+    const { projectName, projectDesc, automationLevel, goldenRules, provider, model } = req.body;
     if (!projectName || !projectDesc) {
       return res.status(400).json({ error: 'projectName and projectDesc are required' });
     }
@@ -250,6 +263,18 @@ app.post('/api/project/intake', async (req, res) => {
     config.automationLevel = automationLevel || 'supervised';
     if (goldenRules) {
       config.goldenRules = goldenRules;
+    }
+    if (provider) {
+      config.settings.provider = provider;
+      Object.keys(config.settings.agents).forEach(role => {
+        config.settings.agents[role as keyof typeof config.settings.agents].provider = provider;
+      });
+    }
+    if (model !== undefined) {
+      config.settings.model = model;
+      Object.keys(config.settings.agents).forEach(role => {
+        config.settings.agents[role as keyof typeof config.settings.agents].model = model;
+      });
     }
     config.phase = 'planning';
     storage.writeConfig(config);
@@ -307,6 +332,19 @@ app.get('/api/project/gap-check', async (req, res) => {
     const sections = storage.readSpecs();
     const review = await orchestrator.runGapDetectorReview(config, sections);
     res.json({ review });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 13.5. Serve design mockup HTML for preview during planning phase
+app.get('/api/project/mockup', (req, res) => {
+  try {
+    const mockupPath = path.join(PROJECT_ROOT, '.lao', 'mockup.html');
+    if (!fs.existsSync(mockupPath)) {
+      return res.status(404).send('Mockup file not found at .lao/mockup.html. Please ensure it is generated.');
+    }
+    res.sendFile(mockupPath, { dotfiles: 'allow' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -387,6 +425,23 @@ app.get('/api/chat/stream', async (req, res) => {
       storage.writeCompiledSpec(md);
     }
 
+    const shouldUpdateMockup = !!result.specUpdate || 
+      /디자인|스타일|테마|색상|ui|버튼|레이아웃|화면|미리보기|다크|화이트|폰트|글꼴|우선순위|mockup|preview|style|theme|color|dark|light/i.test(messageStr);
+
+    if (shouldUpdateMockup) {
+      // Write chunk to stream notifying of mockup generation
+      res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 변경된 기획안을 바탕으로 시안 미리보기를 업데이트하고 있습니다...)*' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'mockup_updating' })}\n\n`);
+
+      try {
+        const currentSections = storage.readSpecs();
+        await MockupGenerator.generateOrUpdate(PROJECT_ROOT, config, currentSections, messageStr);
+      } catch (err: any) {
+        console.error('[LAO Core] Mockup generation failed:', err);
+        res.write(`data: ${JSON.stringify({ type: 'content', chunk: `\n\n*(경고: 시안 미리보기 업데이트 실패: ${err.message})*` })}\n\n`);
+      }
+    }
+
     // Send final completed payload
     const finalEvent = {
       type: 'done',
@@ -416,9 +471,12 @@ app.get('/api/devloop/run', async (req, res) => {
     }
 
     const config = storage.readConfig();
+    if (config.phase !== 'development') {
+      return res.status(400).send('DevLoop commands are only available in the development phase');
+    }
     const devLoop = config.developerLoop || {
       buildCommand: 'npm run build',
-      launchCommand: 'npm start',
+      launchCommand: 'npx -y http-server web/dist -p 3000',
       verifyCommand: 'npm test',
       uiCheckCommand: ''
     };
@@ -447,24 +505,54 @@ app.get('/api/devloop/run', async (req, res) => {
       env: process.env,
     });
 
+    let accumulatedStdout = '';
+    let accumulatedStderr = '';
+
     if (child.stdout) {
       child.stdout.on('data', (data) => {
-        res.write(`data: ${JSON.stringify({ type: 'stdout', chunk: data.toString() })}\n\n`);
+        const chunk = data.toString();
+        accumulatedStdout += chunk;
+        res.write(`data: ${JSON.stringify({ type: 'stdout', chunk })}\n\n`);
       });
     }
 
     if (child.stderr) {
       child.stderr.on('data', (data) => {
-        res.write(`data: ${JSON.stringify({ type: 'stderr', chunk: data.toString() })}\n\n`);
+        const chunk = data.toString();
+        accumulatedStderr += chunk;
+        res.write(`data: ${JSON.stringify({ type: 'stderr', chunk })}\n\n`);
       });
     }
 
-    child.on('close', (code) => {
+    child.on('close', async (code) => {
+      if (code !== 0) {
+        try {
+          const geminiClient = new GeminiClient();
+          const prompt = `실행한 명령어: ${command}\n\n[실행 로그 (stderr)]\n${accumulatedStderr}\n\n[실행 로그 (stdout)]\n${accumulatedStdout}\n\n위 명령어가 실행 중 실패했습니다. 개발자가 이 에러를 쉽게 이해하고 대처할 수 있도록, 원인 분석과 대처 방법을 친절하고 구체적인 한국어(Korean)로 설명해주세요.`;
+          
+          res.write(`data: ${JSON.stringify({ type: 'stdout', chunk: '\n[AI 오류 분석 시작...]\n' })}\n\n`);
+          const explanation = await geminiClient.generateText({
+            prompt,
+          });
+          res.write(`data: ${JSON.stringify({ type: 'explanation', text: explanation })}\n\n`);
+        } catch (e: any) {
+          console.error('[LAO Core] AI explanation error:', e);
+          res.write(`data: ${JSON.stringify({ type: 'explanation', text: `AI 오류 분석 중 에러가 발생했습니다: ${e.message}` })}\n\n`);
+        }
+      }
       res.write(`data: ${JSON.stringify({ type: 'exit', code: code ?? 0 })}\n\n`);
       res.end();
     });
 
-    child.on('error', (err) => {
+    child.on('error', async (err) => {
+      try {
+        const geminiClient = new GeminiClient();
+        const prompt = `실행하려던 명령어: ${command}\n\n오류 내용:\n${err.message}\n\n명령어를 실행하지 못하고 spawn 에러가 발생했습니다. 원인과 해결 방법을 한국어로 설명해주세요.`;
+        const explanation = await geminiClient.generateText({ prompt });
+        res.write(`data: ${JSON.stringify({ type: 'explanation', text: explanation })}\n\n`);
+      } catch (e: any) {
+        console.error('[LAO Core] AI explanation error on child error:', e);
+      }
       res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
       res.end();
     });
@@ -472,6 +560,47 @@ app.get('/api/devloop/run', async (req, res) => {
     console.error('DevLoop Execution error:', error);
     res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
     res.end();
+  }
+});
+
+// 16. Get Checklist Tasks
+app.get('/api/tasks', (req, res) => {
+  try {
+    const raw = storage.readTasksRaw();
+    const parsed = storage.readTasksParsed();
+    res.json({ raw, parsed });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 17. Toggle Checklist Task
+app.post('/api/tasks/toggle', (req, res) => {
+  try {
+    const { index, status } = req.body;
+    if (index === undefined || !status) {
+      return res.status(400).json({ error: 'index and status are required' });
+    }
+    storage.updateTaskStatus(Number(index), status);
+    const raw = storage.readTasksRaw();
+    const parsed = storage.readTasksParsed();
+    res.json({ success: true, raw, parsed });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 18. Generate/Re-generate Checklist Tasks
+app.post('/api/tasks/generate', async (req, res) => {
+  try {
+    const config = storage.readConfig();
+    const sections = storage.readSpecs();
+    const generatedTasks = await orchestrator.runTaskSprout(config, sections);
+    storage.writeTasksRaw(generatedTasks);
+    const parsed = storage.readTasksParsed();
+    res.json({ success: true, raw: generatedTasks, parsed });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 

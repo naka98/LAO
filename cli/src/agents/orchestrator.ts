@@ -25,33 +25,31 @@ export class AgentOrchestrator {
    * Helper to clean markdown JSON fences before parsing
    */
   private cleanJsonResponse(raw: string): string {
-    const cleaned = raw.trim();
+    let cleaned = raw.trim();
     
-    // 1. Find ```json block
+    // 1. Strip outermost ```json and matching trailing ```
     const jsonMarker = '```json';
     const jsonIndex = cleaned.indexOf(jsonMarker);
     if (jsonIndex !== -1) {
-      const start = jsonIndex + jsonMarker.length;
-      const end = cleaned.indexOf('```', start);
-      if (end !== -1) {
-        return cleaned.substring(start, end).trim();
+      cleaned = cleaned.substring(jsonIndex + jsonMarker.length).trim();
+      const lastFence = cleaned.lastIndexOf('```');
+      if (lastFence !== -1) {
+        cleaned = cleaned.substring(0, lastFence).trim();
       }
-      return cleaned.substring(start).trim();
-    }
-
-    // 2. Find generic ``` block
-    const genericMarker = '```';
-    const genericIndex = cleaned.indexOf(genericMarker);
-    if (genericIndex !== -1) {
-      const start = genericIndex + genericMarker.length;
-      const end = cleaned.indexOf('```', start);
-      if (end !== -1) {
-        return cleaned.substring(start, end).trim();
+    } else {
+      // 2. Strip generic ``` blocks
+      const genericMarker = '```';
+      const genericIndex = cleaned.indexOf(genericMarker);
+      if (genericIndex !== -1) {
+        cleaned = cleaned.substring(genericIndex + genericMarker.length).trim();
+        const lastFence = cleaned.lastIndexOf('```');
+        if (lastFence !== -1) {
+          cleaned = cleaned.substring(0, lastFence).trim();
+        }
       }
-      return cleaned.substring(start).trim();
     }
     
-    // 3. Fallback to outer brackets/braces
+    // 3. Fallback to extracting everything within the first and last brace/bracket
     const firstBrace = cleaned.indexOf('{');
     const firstBracket = cleaned.indexOf('[');
     if (firstBrace !== -1 || firstBracket !== -1) {
@@ -83,13 +81,38 @@ export class AgentOrchestrator {
       return { prose };
     }
     const jsonBody = rest.substring(0, closeIndex).trim();
+    
+    // Preprocess jsonBody to escape raw newlines inside JSON string values
+    let fixedJson = '';
+    let inString = false;
+    let escape = false;
+    for (let i = 0; i < jsonBody.length; i++) {
+      const char = jsonBody[i];
+      if (char === '"' && !escape) {
+        inString = !inString;
+        fixedJson += char;
+      } else if (char === '\\' && inString && !escape) {
+        escape = true;
+        fixedJson += char;
+      } else if (inString && (char === '\n' || char === '\r')) {
+        fixedJson += '\\n';
+        escape = false;
+      } else {
+        fixedJson += char;
+        escape = false;
+      }
+    }
+
+    // Clean trailing commas before closing braces/brackets
+    fixedJson = fixedJson.replace(/,\s*([}\]])/g, '$1');
+
     try {
-      const specUpdate = JSON.parse(jsonBody);
+      const specUpdate = JSON.parse(fixedJson);
       if (specUpdate && specUpdate.sectionId && specUpdate.content) {
         return { prose, specUpdate };
       }
-    } catch (e) {
-      console.warn('Failed to parse specUpdate JSON:', e);
+    } catch (e: any) {
+      console.warn('Failed to parse specUpdate JSON even after raw newline escaping:', e);
     }
     return { prose };
   }
@@ -241,7 +264,8 @@ export class AgentOrchestrator {
       agentType: route,
       config: params.config,
       sections: params.sections,
-      chatHistory: params.chatHistory
+      chatHistory: params.chatHistory,
+      userMessage: params.userMessage
     });
 
     const responseRaw = await this.geminiClient.generateText({
@@ -259,5 +283,24 @@ export class AgentOrchestrator {
       prose,
       specUpdate
     };
+  }
+
+  /**
+   * Sprout checklist tasks (task.md) from specs
+   */
+  public async runTaskSprout(config: ProjectConfig, sections: SpecSection[]): Promise<string> {
+    const specsBlock = sections.map(s => `### ${s.title}\n${s.content}`).join('\n\n');
+    const prompt = PromptBuilder.buildTaskSproutPrompt({
+      projectName: config.projectName,
+      projectDesc: config.projectDesc,
+      specsBlock
+    });
+
+    const responseRaw = await this.geminiClient.generateText({
+      prompt,
+      role: 'specifier'
+    });
+
+    return responseRaw.trim();
   }
 }

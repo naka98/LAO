@@ -1,7 +1,7 @@
 {
   "name": "lao",
-  "version": "0.9.0",
-  "description": "LAO (Local AI Office) - CLI Core & Web UI",
+  "version": "0.9.1",
+  "description": "LAO (Leeway AI Office) - CLI Core & Web UI",
   "main": "cli/dist/index.js",
   "bin": {
     "lao": "./cli/dist/index.js"

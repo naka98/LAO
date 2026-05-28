@@ -1,4 +1,4 @@
-# LAO (Local AI Office)
+# LAO (Leeway AI Office)
 
 LAO는 플랫폼 독립적이며 개발자 중심의 AI 설계 워크플로우 애플리케이션으로, **Node.js (Express)** 백엔드와 **React (Vite)** 프론트엔드로 구축되어 있습니다. 로컬 환경에 로그인된 다양한 CLI AI 도구들(`gemini`, `claude`, `codex`, `agy`)을 셸 프로세스로 직접 호출해 사용자의 아이디어를 체계적인 소프트웨어 기획서 및 구조로 자동 확장합니다.
 
