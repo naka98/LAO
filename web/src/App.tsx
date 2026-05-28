@@ -1379,13 +1379,16 @@ export default function App() {
                     <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 capitalize">
                       {msg.author === 'user' ? 'You' : msg.author}
                     </span>
-                    <div className={`p-3 rounded-2xl ${
-                      msg.author === 'user'
-                        ? 'bg-violet-600 text-white rounded-tr-none'
-                        : 'bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80'
-                    }`}>
-                      {msg.content}
-                    </div>
+                    {msg.author === 'user' ? (
+                      <div className="p-3 rounded-2xl bg-violet-600 text-white rounded-tr-none whitespace-pre-wrap">
+                        {msg.content}
+                      </div>
+                    ) : (
+                      <div 
+                        className="p-3 rounded-2xl bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80 markdown-content w-full"
+                        dangerouslySetInnerHTML={renderMarkdown(msg.content)}
+                      />
+                    )}
                   </div>
                 ))
               )}
