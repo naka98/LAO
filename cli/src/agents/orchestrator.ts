@@ -81,13 +81,38 @@ export class AgentOrchestrator {
       return { prose };
     }
     const jsonBody = rest.substring(0, closeIndex).trim();
+    
+    // Preprocess jsonBody to escape raw newlines inside JSON string values
+    let fixedJson = '';
+    let inString = false;
+    let escape = false;
+    for (let i = 0; i < jsonBody.length; i++) {
+      const char = jsonBody[i];
+      if (char === '"' && !escape) {
+        inString = !inString;
+        fixedJson += char;
+      } else if (char === '\\' && inString && !escape) {
+        escape = true;
+        fixedJson += char;
+      } else if (inString && (char === '\n' || char === '\r')) {
+        fixedJson += '\\n';
+        escape = false;
+      } else {
+        fixedJson += char;
+        escape = false;
+      }
+    }
+
+    // Clean trailing commas before closing braces/brackets
+    fixedJson = fixedJson.replace(/,\s*([}\]])/g, '$1');
+
     try {
-      const specUpdate = JSON.parse(jsonBody);
+      const specUpdate = JSON.parse(fixedJson);
       if (specUpdate && specUpdate.sectionId && specUpdate.content) {
         return { prose, specUpdate };
       }
-    } catch (e) {
-      console.warn('Failed to parse specUpdate JSON:', e);
+    } catch (e: any) {
+      console.warn('Failed to parse specUpdate JSON even after raw newline escaping:', e);
     }
     return { prose };
   }

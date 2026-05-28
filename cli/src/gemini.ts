@@ -272,7 +272,7 @@ export class GeminiClient {
         // default: gemini
         let baseCmd = process.env.LAO_PROVIDER_GEMINI_CLI || 'gemini';
         if (!baseCmd.includes('--yolo') && !baseCmd.includes('--approval-mode') && baseCmd.includes('gemini')) {
-          baseCmd = baseCmd.replace(/\bgemini\b/, 'gemini --yolo --sandbox false');
+          baseCmd = baseCmd.replace(/\bgemini\b/, 'gemini --approval-mode plan --sandbox false');
         }
         if (model && !baseCmd.includes('--model')) {
           baseCmd += ` --model "${model}"`;

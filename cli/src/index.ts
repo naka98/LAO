@@ -10,6 +10,7 @@ import { SpecCompiler } from './compiler';
 import { activeProcesses, getShellInfo, GeminiClient } from './gemini';
 import { randomUUID } from 'crypto';
 import { NodeMessage } from './models';
+import { MockupGenerator } from './agents/mockupGenerator';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -422,6 +423,22 @@ app.get('/api/chat/stream', async (req, res) => {
       const recompiledSections = storage.readSpecs();
       const md = SpecCompiler.compile(config, recompiledSections);
       storage.writeCompiledSpec(md);
+    }
+
+    const shouldUpdateMockup = !!result.specUpdate || 
+      /디자인|스타일|테마|색상|ui|버튼|레이아웃|화면|미리보기|다크|화이트|폰트|글꼴|우선순위|mockup|preview|style|theme|color|dark|light/i.test(messageStr);
+
+    if (shouldUpdateMockup) {
+      // Write chunk to stream notifying of mockup generation
+      res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 변경된 기획안을 바탕으로 시안 미리보기를 업데이트하고 있습니다...)*' })}\n\n`);
+
+      try {
+        const currentSections = storage.readSpecs();
+        await MockupGenerator.generateOrUpdate(PROJECT_ROOT, config, currentSections, messageStr);
+      } catch (err: any) {
+        console.error('[LAO Core] Mockup generation failed:', err);
+        res.write(`data: ${JSON.stringify({ type: 'content', chunk: `\n\n*(경고: 시안 미리보기 업데이트 실패: ${err.message})*` })}\n\n`);
+      }
     }
 
     // Send final completed payload
