@@ -1350,13 +1350,16 @@ export default function App() {
 
               {/* Streaming routing chip */}
               {routingStatus.isRouting && (
-                <div className="text-[10px] text-violet-400 animate-pulse bg-violet-950/20 border border-violet-850 px-2 py-0.5 rounded-full">
-                  {t.directorRouting}
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-violet-500/10 border border-violet-500/20 text-violet-400 rounded-full text-[10px] font-semibold animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />
+                  <span>{t.directorRouting}</span>
                 </div>
               )}
               {routingStatus.route && (
-                <div className="text-[10px] text-emerald-400 bg-emerald-950/20 border border-emerald-850 px-2 py-0.5 rounded-full capitalize">
-                  {routingStatus.route} {t.responding}
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-450 animate-ping" />
+                  <span className="capitalize">{routingStatus.route}</span>
+                  <span className="opacity-75">{t.responding}</span>
                 </div>
               )}
             </div>
@@ -1385,6 +1388,18 @@ export default function App() {
                     </div>
                   </div>
                 ))
+              )}
+              {isSending && messages.length > 0 && messages[messages.length - 1].author === 'user' && (
+                <div className="flex flex-col items-start max-w-[85%] mr-auto animate-fade-in">
+                  <span className="text-[10px] uppercase font-bold text-slate-500 mb-1 capitalize">
+                    {routingStatus.route || 'Agent'}
+                  </span>
+                  <div className="p-3 rounded-2xl bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80 flex items-center gap-1 px-4">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </div>
               )}
               <div ref={chatEndRef} />
             </div>
