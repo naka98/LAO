@@ -290,17 +290,7 @@ export class GeminiClient {
     const priority = params.role === 'director' || params.onChunk ? 'high' : 'medium';
 
     try {
-      // Load RULES.md if it exists in the working directory
-      let finalPrompt = params.prompt;
-      const rulesPath = path.join(process.cwd(), 'RULES.md');
-      if (fs.existsSync(rulesPath)) {
-        try {
-          const rules = fs.readFileSync(rulesPath, 'utf8');
-          finalPrompt += `\n\n## RULES.md (Strict Project Constraints)\n${rules}`;
-        } catch (e) {
-          console.warn('[LAO Core] Failed to read RULES.md', e);
-        }
-      }
+      const finalPrompt = params.prompt;
 
       // 1. Create temporary file for prompt
       promptFile = path.join(os.tmpdir(), `lao_prompt_${randomUUID()}.txt`);

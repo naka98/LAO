@@ -1,6 +1,29 @@
 import { ProjectConfig, SpecSection, DecisionCard, NodeMessage, GoldenRules } from '../models';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class PromptBuilder {
+
+  public static buildConsolidatedRules(configOrGoldenRules: ProjectConfig | GoldenRules): string {
+    const golden = 'goldenRules' in configOrGoldenRules ? configOrGoldenRules.goldenRules : configOrGoldenRules;
+    let rulesMd = '';
+    const rulesPath = path.join(process.cwd(), 'RULES.md');
+    if (fs.existsSync(rulesPath)) {
+      try {
+        rulesMd = fs.readFileSync(rulesPath, 'utf8').trim();
+      } catch (e) {
+        console.warn('[LAO Core] Failed to read RULES.md inside PromptBuilder:', e);
+      }
+    }
+
+    return `## Consolidated Project Rules & Constraints
+### Tech Stack constraints
+- **Frontend**: ${golden.frontend}
+- **Backend**: ${golden.backend}
+- **Database**: ${golden.database}
+- **Additional**: ${golden.additional}
+${rulesMd ? `\n### Strict Custom Rules (RULES.md)\n${rulesMd}` : ''}`;
+  }
 
   /**
    * Builds prompt for the Director to route user message to appropriate agent
@@ -27,11 +50,8 @@ No commentary, no markdown fences.
 ## Project Context
 Project: ${params.config.projectName}
 Description: ${params.config.projectDesc}
-Golden Rules:
-- Frontend: ${params.config.goldenRules.frontend}
-- Backend: ${params.config.goldenRules.backend}
-- Database: ${params.config.goldenRules.database}
-- Additional Constraints: ${params.config.goldenRules.additional}
+
+${this.buildConsolidatedRules(params.config)}
 
 ${historyBlock}
 
@@ -87,11 +107,7 @@ ${params.projectName}
 ## Rough Idea
 ${params.projectDesc}
 
-## Golden Rules (Constraints)
-- Frontend: ${params.goldenRules.frontend}
-- Backend: ${params.goldenRules.backend}
-- Database: ${params.goldenRules.database}
-- Additional: ${params.goldenRules.additional}
+${this.buildConsolidatedRules(params.goldenRules)}
 
 ## Required Sections & Formatting Rules:
 1. **Core Spec (\`coreSpec\`)\**:
@@ -148,11 +164,7 @@ ${params.projectName}
 ## Rough Idea / Description
 ${params.projectDesc}
 
-## Technical Golden Rules
-- Frontend: ${params.goldenRules.frontend}
-- Backend: ${params.goldenRules.backend}
-- Database: ${params.goldenRules.database}
-- Additional Constraints: ${params.goldenRules.additional}
+${this.buildConsolidatedRules(params.goldenRules)}
 ${feedbackBlock}
 
 ## The Three Concepts to Generate:
@@ -235,11 +247,7 @@ Do not include any prose outside the json block. All text fields in the options 
 You are the **Optionizer**. Your task is to analyze the draft specification below and propose 1 to 3 critical architectural or design decisions (Decision Cards) that the developer needs to make.
 Each decision must conform to the Golden Rules and present 2 to 3 distinct options.
 
-## Project Golden Rules
-- Frontend: ${params.config.goldenRules.frontend}
-- Backend: ${params.config.goldenRules.backend}
-- Database: ${params.config.goldenRules.database}
-- Constraints: ${params.config.goldenRules.additional}
+${this.buildConsolidatedRules(params.config)}
 
 ## Active Specifications
 ${specsBlock}
@@ -281,11 +289,7 @@ The JSON must match the following shape:
 You are the **Gap Detector**. Review the active specification below. 
 Find any logical contradictions, empty requirements, edge cases, or violations of the Golden Rules.
 
-## Project Golden Rules
-- Frontend: ${params.config.goldenRules.frontend}
-- Backend: ${params.config.goldenRules.backend}
-- Database: ${params.config.goldenRules.database}
-- Constraints: ${params.config.goldenRules.additional}
+${this.buildConsolidatedRules(params.config)}
 
 ## Active Specifications
 ${specsBlock}
@@ -352,11 +356,7 @@ Respond with:
 - **Core Spec (core_spec)**: MUST contain a \`## Out of Scope (Non-Goals)\` section at the end of the markdown content.
 - **Feature content**: MUST contain \`## User Story\` (using the \`As a... I want to... So that...\` template) and \`## Acceptance Criteria\` (using the Given/When/Then layout) sections.
 
-## Golden Rules
-- Frontend: ${params.config.goldenRules.frontend}
-- Backend: ${params.config.goldenRules.backend}
-- Database: ${params.config.goldenRules.database}
-- Constraints: ${params.config.goldenRules.additional}
+${this.buildConsolidatedRules(params.config)}
 
 ## Current Specifications
 ${specsBlock}
@@ -404,12 +404,18 @@ ${params.specsBlock}
 `;
   }
 
-  private static chatHistorySection(messages: NodeMessage[]): string {
+  private static chatHistorySection(messages: NodeMessage[], maxMessages = 10): string {
     if (messages.length === 0) return '';
-    const lines = messages.map(
+    const startIdx = Math.max(0, messages.length - maxMessages);
+    const visibleMessages = messages.slice(startIdx);
+    const lines = visibleMessages.map(
       (m) => `**${this.getAuthorLabel(m.author)}**: ${m.content}`
     );
-    return `## Conversation History\n${lines.join('\n')}`;
+    let output = `## Conversation History\n`;
+    if (startIdx > 0) {
+      output += `*(Older ${startIdx} messages truncated to optimize agent context)*\n`;
+    }
+    return output + lines.join('\n');
   }
 
   private static getAuthorLabel(author: string): string {
