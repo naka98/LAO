@@ -13,24 +13,23 @@ LAO는 원래 시각적인 React Flow 마인드맵 캔버스 기반으로 설계
 
 ---
 
-## 핵심 기능
+## 핵심 기능 (v0.9.3 기준)
 
-1. **로컬 CLI AI 엔진**: 시스템 CLI 실행 경로의 `gemini`, `claude`, `codex`, `agy`, `cursor` 명령어 프로세스를 `spawn` 구조로 직접 호출하여 AI를 실행합니다. 명령어 길이를 초과하지 않도록 프롬프트를 임시 파일로 자동으로 처리합니다.
-2. **다중 에이전트 협업 체계**: AI 에이전트들의 대화를 분류하는 "디렉터(Director)" 에이전트와 분야별 고유 능력을 갖춘 스텝 에이전트(Step Agent)가 유기적으로 작동합니다:
-   * **Specifier (구체화)**: 요구사항 구체화 및 소프트웨어 컴포넌트 구조를 모듈 단위로 작성
-   * **Researcher (조사)**: 구현을 위한 기술 스택 조사 및 논리적 타당성 검증
-   * **Optionizer (대안 제시)**: 선택 가능한 아키텍처 의사결정을 Decision Card 형태로 제안
-   * **Gap Detector (공백 감지)**: 명세서 검토를 통해 논리적 모순이나 누락 항목을 탐지
-   * **Mockup Generator (목업 생성)**: 통합 명세서 및 사용자의 피드백을 기반으로 `.lao/mockup.html` 경로에 인터랙티브한 단일 HTML 파일 목업을 자동으로 생성하고 갱신
-3. **제어 설정 온보딩 위저드**: 프로젝트 이름, 기본 아이디어 구상안, 자동화 레벨, Golden Rules(기술 가드레일), AI 프로바이더 오버라이드 설정을 제공하고, PRD 파일을 바로 업로드(Import)할 수 있는 기능을 지원합니다.
-4. **인터랙티브 의사결정 카드 (Decision Cards)**: Optionizer 에이전트가 제안한 의사결정 카드를 해결하면 개발자의 선택과 근거가 기준 기록 파일(`criteria.md`)에 자동으로 아카이빙됩니다.
-5. **분할 화면 레이아웃 (Split-Screen)**:
-   * **왼쪽 패널**: 온보딩 위저드, 미결정 의사결정 카드 목록 및 공백 탐색 경고 문구를 표시합니다.
-   * **오른쪽 패널**: 실시간 통합 명세서 미리보기(Planning 단계에서 더블 클릭 시 인라인 편집 가능), DevLoop 콘솔 로그, 의사결정 누적 타임라인 로그, 그리고 실시간으로 구성된 목업을 샌드박스 Iframe 형태로 확인할 수 있는 Live App Preview 기능을 탭 단위로 제공합니다.
-6. **실시간 SSE 토큰 스트리밍**: 대화 입력 시, AI가 한 글자씩 실시간으로 작성하는 부드러운 타이핑 효과가 노드 대화창에 반영됩니다.
-7. **개발자 루프 콘솔 (DevLoop)**: 기획 중인 프로젝트의 검증 명령어(빌드, 단위 테스트, 서버 실행 등)를 Web UI 내부에서 호출하고, 셸 표준 출력을 실시간으로 스트리밍하여 확인합니다.
-8. **의사결정 히스토리 타임라인**: 자식 노드 채택 시 기록되는 `.lao/criteria.md`를 파싱하여 의사결정 진행 이력을 시간순으로 축적된 카드 형태로 제공합니다.
-9. **통합 명세서 실시간 렌더러**: 개별 스펙 문서들을 수합해 최종 Markdown 명세서(`spec_compiled.md`)로 렌더링하며 즉시 복사하거나 편집할 수 있습니다.
+1. **초고속 로컬 CLI AI 엔진 및 E2BIG 우회**: 
+   * 시스템 CLI의 `gemini`, `claude`, `codex`, `agy`, `cursor` 명령어를 호출할 때, 무거운 로그인 셸 실행(`-lc`) 대신 **비로그인 셸(`-c`)을 사용하여 기동 지연 오버헤드를 10ms 수준으로 최소화**하고 파일 락을 예방합니다.
+   * UNIX 계열 커널의 256KB 인수 크기 제한(`E2BIG` 에러)을 우회하기 위해 프롬프트 텍스트 전체를 **표준 파일 리다이렉션(`<`) 형태로 주입**하여 대규모 기획 사양 생성을 완벽히 지원합니다.
+2. **기획 검증 하네스 및 자가 교정 (PlanningHarness)**:
+   * 발아되거나 수정되는 사양서 마크다운을 기계적으로 Assert 검증(예: `Out of Scope` 섹션 및 Given-When-Then 문법 규격 검사)합니다.
+   * 검증 실패 시 에러 피드백을 프롬프트에 주입하여 최대 3회 자가 교정(Self-Correction)을 돌려 품질의 최저 하한선을 강제합니다.
+3. **순차 실행 스케줄러 큐 (Spawn Queue)**:
+   * 로컬 CPU 자원 점유율 폭주와 CLI SQLite DB 잠금 에러를 차단하기 위해 **동시성(최대 2개)을 통제하는 스케줄러 큐**를 가동합니다.
+   * 중복성 제거(Deduplication) 기술로 대기 중인 이전 Mockup 요청을 큐에서 자동으로 추방하고, 90초 타이머 초과 시 좀비 프로세스를 소멸(`SIGKILL`)시킵니다.
+4. **수동 중재 및 강제 승인 UI (Human-In-The-Loop)**:
+   * 자가 교정 루프 3회 초과 실패 시, UI 대시보드 대화창에 붉은색 검증 실패 카드와 세부 에러 내역을 렌더링합니다.
+   * 개발자는 반려된 기획안을 버리지 않고 **[강제 승인 (Force Commit)]** 버튼을 클릭하여 하네스 예외 우회 즉각 반영 처리를 내릴 수 있습니다.
+5. **다중 에이전트 협업 체계**: AI 에이전트들의 대화를 분류하는 "디렉터(Director)" 에이전트와 분야별 고유 능력을 갖춘 스텝 에이전트(Step Agent)가 유기적으로 작동하며, 에이전트별 관계 사양서만 슬라이싱하여 컨텍스트 효율을 극대화하는 **Context Budgeting**을 수행합니다.
+6. **실시간 SSE 진행 상태 중계**: AI 연산 및 하네스 검증 시, 대화창 하단 로더 영역에 *"🔍 [하네스 검증] 스펙을 검증하고 있습니다..."* 등의 상태 메시지를 실시간 중계하여 사용자 대기 피로도를 대폭 완화합니다.
+7. **기획 시안 5초 Debounce 가드**: 챗 업데이트로 인한 UI 시안 미리보기(`MockupGenerator`) 재생성 시, 무제한 실행을 막기 위해 **5초 디바운싱 스로틀**을 도입하여 로컬 맥북의 쿨링 팬 과열을 억제합니다.
 
 ---
 
@@ -40,15 +39,19 @@ LAO는 원래 시각적인 React Flow 마인드맵 캔버스 기반으로 설계
 LAO/
 ├── cli/                 # Express 백엔드 서버 및 CLI AI 실행부
 │   ├── src/
-│   │   ├── agents/      # 오케스트레이터, 프롬프트 빌더 및 목업 생성기
+│   │   ├── agents/      # 오케스트레이터, 프롬프트 빌더, 목업 생성기 및 기획 하네스
+│   │   │   ├── harness.ts      # [NEW] PlanningHarness (규격 검증 및 Linter)
+│   │   │   ├── orchestrator.ts # 마이크로 에이전트 자가보정 루프 및 코디네이터
+│   │   │   └── promptBuilder.ts# 에이전트용 피드백 피처 템플릿 빌더
 │   │   ├── compiler.ts  # 명세서 마크다운 컴파일러
-│   │   ├── gemini.ts    # spawn 셸 프로세스 실행기
-│   │   ├── index.ts     # Express 엔드포인트 및 SSE 스트림
-│   │   └── storage.ts   # .lao 로컬 저장소 및 설정 관리 (Specs, Decisions 포함)
+│   │   ├── gemini.ts    # spawn 셸 프로세스 연동 및 stdin 파이핑 정규화
+│   │   ├── index.ts     # Express 엔드포인트, SSE 스트림 및 Debounce 스로틀
+│   │   ├── scheduler.ts # [NEW] SpawnQueueManager (동시성 큐 및 타이머 가드)
+│   │   └── storage.ts   # .lao 로컬 저장소 및 설정 관리
 │   └── package.json
 └── web/                 # React 프론트엔드 (Vanilla CSS 레이아웃)
     ├── src/
-    │   ├── App.tsx      # 메인 대시보드 및 제어 페이지
+    │   ├── App.tsx      # 메인 대시보드, 에이전트 스트리밍 중계 및 수동 중재(HITL) 패널
     │   └── types.ts     # 공유 TS 타입 정의
     └── package.json
 ```
@@ -69,84 +72,31 @@ LAO/
   * **Cursor CLI**: `cursor` (Cursor Agent CLI) (선택)
 
 ### 설치 및 구동 방법
-
-프로젝트 루트 디렉터리에서 단 한 번의 명령어로 의존성 설치 및 CLI 백엔드와 Web UI 컴파일을 자동으로 진행할 수 있습니다.
-
-#### 방법 A: npm 사용 시
 ```bash
 # 전체 프로젝트 의존성 설치 및 자동 빌드 수행
 npm install
 
-# 애플리케이션 시작
+# 애플리케이션 시작 (로컬 포트 4000 구동)
 npm start
-```
-
-#### 방법 B: Yarn 사용 시
-```bash
-# 전체 프로젝트 의존성 설치 및 자동 빌드 수행
-yarn install
-
-# 애플리케이션 시작
-yarn start
-```
-
-* 백엔드 서버가 `http://localhost:4000` 포트로 실행됩니다.
-* macOS의 경우 자동으로 웹 브라우저 창이 실행되어 화면이 뜹니다.
-
-### 원격 Git 직접 / 전역 설치 (Remote Git Installation)
-
-LAO를 시스템 전역 CLI 도구로 설치하거나, 다른 프로젝트의 원격 의존성 패키지로 직접 추가할 수 있습니다.
-
-#### 1. 전역(Global) 설치
-전역으로 설치하면 어느 디렉터리에서나 `lao` 명령어를 실행하여 바로 워크스페이스를 시작할 수 있습니다.
-
-* **npm 사용 시**:
-  ```bash
-  npm install -g naka98/LAO
-  ```
-* **Yarn 사용 시**:
-  ```bash
-  yarn global add https://github.com/naka98/LAO.git
-  ```
-
-**실행 방법**:
-설계를 생성하거나 관리할 프로젝트 폴더로 이동한 후 `lao` 명령어를 실행하면 됩니다:
-```bash
-cd /path/to/your/project
-lao
-```
-
-#### 2. 프로젝트 의존성 패키지로 설치
-다른 프로젝트의 `package.json`에 LAO를 의존성으로 추가해 사용할 수 있습니다.
-
-* **npm 사용 시**:
-  ```bash
-  npm install naka98/LAO
-  ```
-* **Yarn 사용 시**:
-  ```bash
-  yarn add https://github.com/naka98/LAO.git
-  ```
-  *(참고: 의존성 추가 시, 라이프사이클 빌드 파이프라인이 작동하여 node_modules 내부의 CLI 및 Web UI 에셋을 자동으로 설치하고 빌드합니다.)*
-
-**실행 방법**:
-로컬 의존성 바이너리를 `npx` 또는 `yarn`을 사용하여 실행합니다:
-```bash
-# npm 사용 시
-npx lao
-
-# Yarn 사용 시
-yarn lao
 ```
 
 ---
 
 ## 환경 변수 설정
 
-`cli` 디렉터리 하위에 `.env` 파일을 생성하여 기본 프로바이더를 수동 제어할 수 있습니다:
+`cli` 디렉터리 하위에 `.env` 파일을 생성하여 기본 프로바이더 및 로컬 CLI 경로를 지정할 수 있습니다:
+
 ```env
-LAO_PROVIDER=gemini       # 사용할 CLI 도구 지정 (gemini | claude | codex | agy | cursor)
-LAO_MODEL=                # (선택) 특정 모델로 실행 오버라이드
+# 기본 프로바이더 및 모델 오버라이드
+LAO_PROVIDER=gemini       # 사용할 CLI 지정 (gemini | claude | codex | agy | cursor)
+LAO_MODEL=                # (선택) 모델명 수동 지정
+
+# [v0.9.3 추가] 커스텀 로컬 CLI 명령어 경로 바인딩 (PATH 자동 탐색에 실패하거나 수동 지정 필요 시)
+LAO_PROVIDER_CLAUDE_CLI=/opt/homebrew/bin/claude
+LAO_PROVIDER_GEMINI_CLI=/usr/local/bin/gemini
+LAO_PROVIDER_CODEX_CLI=
+LAO_PROVIDER_CURSOR_CLI=
+LAO_PROVIDER_AGY_CLI=
 ```
 
 ---
@@ -154,4 +104,3 @@ LAO_MODEL=                # (선택) 특정 모델로 실행 오버라이드
 ## 라이선스
 
 이 프로젝트는 MIT 라이선스에 따라 라이선스가 부여됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하십시오.
-
