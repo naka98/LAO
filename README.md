@@ -1,115 +1,115 @@
 # LAO (Leeway AI Office)
 
-LAO is a platform-independent, developer-first AI design workflow application built with **Node.js (Express)** and **React (Vite)**. It transforms raw ideas into AI-ready, structured specifications by running local command-line interface (CLI) AI clients on your machine.
+LAO turns rough product ideas into locked, AI-ready specifications before coding agents start implementation.
 
 ---
 
-## Architecture Transition Rationale (React Flow -> Document-Driven Workspace)
+## Why LAO?
 
-LAO was originally designed with a visual React Flow mindmap canvas. In v0.9, we transitioned to a **Document-Driven Guided Planning Workspace** to resolve key technical and operational challenges:
-1. **Reduced Cognitive Load**: Instead of micromanaging complex graph nodes and connections, the user interacts with clean document previews and high-level decision cards.
-2. **Strict Guardrails (Golden Rules)**: Enforces technology guardrails (e.g. SQLite only, no Docker) by injecting them directly into the specialized agent prompts.
-3. **Prevention of Spec-Code Drift**: Introduces a manual "Handover Gate" that locks the compiled specification into a read-only state during development.
-
----
-
-## Key Features (v0.9.3)
-
-1. **Local CLI AI Engine & E2BIG Bypass**: 
-   * Executes queries using locally configured CLI clients (`gemini`, `claude`, `codex`, `agy`, `cursor`) via zsh processes. Uses a **non-login shell (`-c`) to minimize startup latency down to 10ms**, bypassing homebrew/node environment reloading lags.
-   * Leverages shell file redirection (`<`) instead of command substitution to **completely bypass UNIX `ARG_MAX` environment limits (`E2BIG` errors)**, allowing large prompt payloads.
-2. **Planning Harness & Self-Correction**:
-   * Programmatically asserts (Linter) sprouted or updated specs for formatting constraints (e.g., given-when-then acceptance criteria, out of scope section).
-   * Runs up to 3 self-correction iterations injecting harness feedback directly into prompt buffers.
-   * **Note on Custom Rules**: Integrates with a `RULES.md` file in the project root to check for tech-stack violations. Note that `RULES.md` is **not created by default**; developers must manually create this file in the project root to activate custom rules checks.
-3. **Sequential Execution Queue (Spawn Queue)**:
-   * Throttles active process spawning to `maxConcurrency = 2` to prevent macOS freeze and CLI SQLite database locks (`SQLITE_BUSY`).
-   * Evicts duplicate pending mockup requests and cleans up orphan processes via a 90-second timeout force-kill (`SIGKILL`).
-   * **Failover Fallback Chain**: If the primary AI provider CLI fails (due to path or authentication errors), the system automatically attempts fallback execution in the order of `gemini` ➔ `claude` ➔ `codex`.
-4. **Human-In-The-Loop (HITL) Intervention UI**:
-   * Renders a warning box with specific validation errors on the chat interface when 3 self-correction loops fail.
-   * Provides a **[Force Commit]** bypass button, letting the developer manually override harness rules and save the specification as-is.
-5. **Multi-Agent Collaboration**: Features a centralized "Director" agent routing inputs to specialized step agents, applying **Context Budgeting** to slice and send only relevant spec files.
-6. **Real-time SSE Status Streaming**: Streams active agent and harness pipeline diagnostics (e.g., *"🔍 [Harness] Asserting Given-When-Then rules..."*) directly to the loader terminal to lower user waiting fatigue.
-7. **5-Second Mockup Debouncing**: Throttles mockup preview generation (`MockupGenerator`) behind a 5-second debounce timer to prevent system fans from overheating during high-frequency chats.
-8. **DevLoop Console Limits**:
-   * Supports `build`, `launch`, and `verify` command executions.
-   * *Ghost Feature Note*: The backend models and API support a `uiCheck` command type (`uiCheckCommand` in config), but this is currently a backend-only definition and **not implemented** in the React Web UI frontend.
-
----
-
-## Project Structure
+Coding agents are powerful, but vague chats often become drifting implementations.  
+LAO adds a planning layer between idea and code.
 
 ```
-LAO/
-├── cli/                 # Express backend server & CLI AI runner
-│   ├── src/
-│   │   ├── agents/      # Orchestrator, prompt builder, mockup generator, & harness
-│   │   │   ├── harness.ts      # [NEW] PlanningHarness (specification validator & diagnostics)
-│   │   │   ├── orchestrator.ts # Orchestrator for agent routing & self-correction loop
-│   │   │   └── promptBuilder.ts# Prompt templates with error feedback injection
-│   │   ├── compiler.ts  # Spec compiler to Markdown
-│   │   ├── gemini.ts    # Spawn shell CLI client runner, stdin piping, & JSON normalizer
-│   │   ├── index.ts     # Express endpoints, SSE stream routes, & debounce throttle
-│   │   ├── scheduler.ts # [NEW] SpawnQueueManager (Concurrency scheduler & CPU protector)
-│   │   └── storage.ts   # Persistent settings/spec storage under .lao/
-│   └── package.json
-└── web/                 # React Web UI (Vanilla CSS layout)
-    ├── src/
-    │   ├── App.tsx      # Main application dashboard, status streaming, & HITL panel
-    │   └── types.ts     # Shared TS types
-    └── package.json
+Idea ➔ Spec Sprout ➔ Decision Cards ➔ Spec Lock ➔ DevLoop
 ```
 
 ---
 
-## Quick Start & Installation
+## Who is it for?
+
+- **Developers** using Claude Code, Codex, Gemini CLI, Cursor, or other local AI agents (fully configurable).
+- **Solo builders** who want structured planning before implementation.
+- **Teams** that want reusable project specs instead of scattered AI chats.
+
+---
+
+## Core Concepts
+
+- **Local CLI AI Engine**: Harnesses local CLIs for ultra-fast runs with minimal orchestration overhead.
+- **Director + Specialized Agents**: Specialized step agents led by a routing Director.
+- **Golden Rules**: Programmatic constraints enforced on specifications.
+- **Decision Cards**: Micro-decisions agreed on before locking requirements.
+- **Compiled Spec**: The single source of truth for the project.
+- **Handover Gate**: The read-only lock reducing spec-code drift.
+- **DevLoop Console**: Local execution, building, and verification loop.
+
+---
+
+## Quick Start for Existing CLI Users
 
 ### Prerequisites
-* **Node.js** v18.0.0 or higher
-* **npm** v9.0.0 or higher
-* **Yarn** (optional) - if using Yarn for package management
-* Local AI CLI clients installed and authenticated:
-  * **Gemini CLI**: `gemini` (default)
-  * **Claude CLI**: `claude` (Claude Engineer)
-  * **Codex CLI**: `codex`
-  * **Antigravity CLI**: `agy` (optional)
-  * **Cursor CLI**: `cursor` (Cursor Agent CLI) (optional)
+- Node.js v18.0.0 or higher
+- Configurable local AI CLI clients (`gemini`, `claude`, `codex`, `cursor` etc.) authenticated
 
-### Setup & Launch
+### 1. Install globally
+You can install LAO directly from GitHub:
+
 ```bash
-# Install dependencies and build the workspace automatically
-npm install
+# Using yarn
+yarn global add git+https://github.com/naka98/LAO.git
 
-# Start the application (running on port 4000)
-npm start
+# OR Using npm
+npm install -g git+https://github.com/naka98/LAO.git
 ```
+
+### 2. Run the office
+Navigate to your project root folder and launch LAO:
+
+```bash
+lao
+```
+LAO will start on port `4000` and automatically open the guided planning workspace in your browser (`http://localhost:4000`).
 
 ---
 
-## Environmental Configurations
+## Learn More
 
-You can configure default providers and specify custom CLI execution paths using a `.env` file in the `cli` folder:
+- 📄 [Why LAO?](./docs/why-lao.md)
+- 📐 [Architecture Rationale](./docs/v0.9_architecture.md)
+- ⚙️ [Operating Principles](./docs/operating-principles.md)
 
-```env
-# Default provider and model override
-LAO_PROVIDER=gemini       # Selected tool (gemini | claude | codex | agy | cursor)
-LAO_MODEL=                # Override model if required
+<details>
+<summary>🛠️ Local Development (Contributing)</summary>
 
-# [v0.9.3 added] Custom local CLI executable paths (if not automatically resolved in PATH)
-LAO_PROVIDER_CLAUDE_CLI=/opt/homebrew/bin/claude
-LAO_PROVIDER_GEMINI_CLI=/usr/local/bin/gemini
-LAO_PROVIDER_CODEX_CLI=
-LAO_PROVIDER_CURSOR_CLI=
-LAO_PROVIDER_AGY_CLI=
+If you want to clone the repository and run it locally for development:
+
+```bash
+# Clone the repository
+git clone https://github.com/naka98/LAO.git
+cd LAO
+
+# Install dependencies & start
+npm install # or yarn install
+npm start   # or yarn start
 ```
+</details>
 
-### Intake Selection Constraints
-* Note on `selectedOptionKey`: While the typescript interface models support a `'custom'` type option in configuration settings, the API onboarding selector endpoint (`/api/project/intake/select`) currently **strictly validates** and only accepts `'A' | 'B' | 'C'`. Custom options are currently not supported via the intake API endpoint.
-```
+<details>
+<summary>⚙️ Deep Dive & Technical Highlights (v0.9.3)</summary>
 
----
+### 1. Local CLI AI Engine & E2BIG Bypass
+- Executes local CLI tools (`gemini`, `claude`, etc.) via non-login shells (`-c`) to minimize startup latency down to 10ms.
+- Uses file redirection (`<`) instead of command substitution to bypass UNIX `ARG_MAX` limits (`E2BIG`), allowing massive specification prompts.
 
-## License
+### 2. Concurrency Control (Spawn Queue)
+- Limits active AI tasks to `maxConcurrency = 2` to prevent CPU freeze and SQLite database locks (`SQLITE_BUSY`).
+- Evicts redundant requests and kills orphans automatically after 90 seconds.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+### 3. Planning Harness & Self-Correction
+- Automated Linter checks specifications for formatting constraints (e.g., Given-When-Then criteria).
+- Performs up to 3 self-correction loops using AI feedback injection.
+- Integrates with a local `RULES.md` in the project root to enforce tech-stack boundaries.
+
+### 4. Human-In-The-Loop (HITL) Interventions
+- Renders detailed warnings on the UI if self-correction fails 3 times.
+- Features a **[Force Commit]** bypass option to let developers manually override errors.
+
+### 5. Multi-Agent & Context Budgeting
+- Centralized Director routes work to step agents.
+- Slices context to send only relevant parts of specifications to keep prompt tokens within the budget.
+
+### 6. DevLoop Console & SSE Streaming
+- Runs `build`, `launch`, and `verify` commands in the console.
+- Streams live progress diagnostics directly to the browser UI via Server-Sent Events (SSE) to prevent user wait fatigue.
+
+</details>

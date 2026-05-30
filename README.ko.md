@@ -1,114 +1,115 @@
 # LAO (Leeway AI Office)
 
-LAO는 플랫폼 독립적이며 개발자 중심의 AI 설계 워크플로우 애플리케이션으로, **Node.js (Express)** 백엔드와 **React (Vite)** 프론트엔드로 구축되어 있습니다. 로컬 환경에 로그인된 다양한 CLI AI 도구들(`gemini`, `claude`, `codex`, `agy`)을 셸 프로세스로 직접 호출해 사용자의 아이디어를 체계적인 소프트웨어 기획서 및 구조로 자동 확장합니다.
+LAO는 코딩 에이전트가 구현을 시작하기 전에 모호한 제품 아이디어를 구조화되고 잠금 상태인 AI-ready 명세서로 변환합니다.
 
 ---
 
-## 아키텍처 전환 배경 (React Flow -> 문서 기반 가이드 워크스페이스)
+## Why LAO?
 
-LAO는 원래 시각적인 React Flow 마인드맵 캔버스 기반으로 설계되었으나, 다음과 같은 기술적/운영적 한계를 극복하기 위해 v0.9 버전에서 **문서 기반 가이드 기획 워크스페이스**로 완전히 전환되었습니다:
-1. **인지 부하(Cognitive Load) 감소**: 복잡한 그래프 노드와 연결 관계를 수동으로 제어하는 피로를 덜어내고, 깔끔한 문서 미리보기와 고수준의 의사결정 카드를 통해 명세에 집중할 수 있도록 하였습니다.
-2. **기술 스택 가드레일 (Golden Rules)**: 프로젝트 구성 설정 파일(`lao.config.json`)을 통해 핵심 기술 스택 제약 사항(예: SQLite 사용, Docker 비의존 등)을 에이전트 프롬프트에 자동으로 주입하고 통제합니다.
-3. **명세서와 코드 간 드리프트 방지**: 기획 단계와 개발 단계를 명확히 분리하고, 개발 돌입 시 명세서를 읽기 전용 상태로 강제 잠금(Lock)하여 명세서가 동기화되지 않고 어긋나는 현상을 방지합니다.
-
----
-
-## 핵심 기능 (v0.9.3 기준)
-
-1. **초고속 로컬 CLI AI 엔진 및 E2BIG 우회**: 
-   * 시스템 CLI의 `gemini`, `claude`, `codex`, `agy`, `cursor` 명령어를 호출할 때, 무거운 로그인 셸 실행(`-lc`) 대신 **비로그인 셸(`-c`)을 사용하여 기동 지연 오버헤드를 10ms 수준으로 최소화**하고 파일 락을 예방합니다.
-   * UNIX 계열 커널의 256KB 인수 크기 제한(`E2BIG` 에러)을 우회하기 위해 프롬프트 텍스트 전체를 **표준 파일 리다이렉션(`<`) 형태로 주입**하여 대규모 기획 사양 생성을 완벽히 지원합니다.
-2. **기획 검증 하네스 및 자가 교정 (PlanningHarness)**:
-   * 발아되거나 수정되는 사양서 마크다운을 기계적으로 Assert 검증(예: `Out of Scope` 섹션 및 Given-When-Then 문법 규격 검사)합니다.
-   * 검증 실패 시 에러 피드백을 프롬프트에 주입하여 최대 3회 자가 교정(Self-Correction)을 돌려 품질의 최저 하한선을 강제합니다.
-   * **기술 스택 규칙(RULES.md) 주의사항**: 프로젝트 루트의 `RULES.md` 가이드라인 파일과 연동하여 검증을 수행합니다. 단, `RULES.md`는 **기본으로 자동 생성되지 않으므로**, 기술 스택 제약 사항 검증을 활성화하려면 프로젝트 루트에 `RULES.md` 파일을 사용자가 수동으로 생성해주어야 합니다.
-3. **순차 실행 스케줄러 큐 (Spawn Queue)**:
-   * 로컬 CPU 자원 점유율 폭주와 CLI SQLite DB 잠금 에러를 차단하기 위해 **동시성(최대 2개)을 통제하는 스케줄러 큐**를 가동합니다.
-   * 중복성 제거(Deduplication) 기술로 대기 중인 이전 Mockup 요청을 큐에서 자동으로 추방하고, 90초 타이머 초과 시 좀비 프로세스를 소멸(`SIGKILL`)시킵니다.
-   * **자동 예외 복구(Failover Fallback)**: 구동 시 설정된 주 AI 도구 CLI가 에러(바이너리 유실, API Key 인증 오류 등)로 실행 실패하는 경우, 별도 설정 없이 `gemini` ➔ `claude` ➔ `codex` 순서로 차례대로 자동 실행 대안 전환(Failover)을 시도합니다.
-4. **수동 중재 및 강제 승인 UI (Human-In-The-Loop)**:
-   * 자가 교정 루프 3회 초과 실패 시, UI 대시보드 대화창에 붉은색 검증 실패 카드와 세부 에러 내역을 렌더링합니다.
-   * 개발자는 반려된 기획안을 버리지 않고 **[강제 승인 (Force Commit)]** 버튼을 클릭하여 하네스 예외 우회 즉각 반영 처리를 내릴 수 있습니다.
-5. **다중 에이전트 협업 체계**: AI 에이전트들의 대화를 분류하는 "디렉터(Director)" 에이전트와 분야별 고유 능력을 갖춘 스텝 에이전트(Step Agent)가 유기적으로 작동하며, 에이전트별 관계 사양서만 슬라이싱하여 컨텍스트 효율을 극대화하는 **Context Budgeting**을 수행합니다.
-6. **실시간 SSE 진행 상태 중계**: AI 연산 및 하네스 검증 시, 대화창 하단 로더 영역에 *"🔍 [하네스 검증] 스펙을 검증하고 있습니다..."* 등의 상태 메시지를 실시간 중계하여 사용자 대기 피로도를 대폭 완화합니다.
-7. **기획 시안 5초 Debounce 가드**: 챗 업데이트로 인한 UI 시안 미리보기(`MockupGenerator`) 재생성 시, 무제한 실행을 막기 위해 **5초 디바운싱 스로틀**을 도입하여 로컬 맥북의 쿨링 팬 과열을 억제합니다.
-8. **DevLoop 가상 콘솔 한계**:
-   * 기획 잠금 상태에서 `build`, `launch`, `verify` 명령을 실행할 수 있습니다.
-   * *유령 기능(Ghost Feature) 주의*: 백엔드 데이터 모델 및 API 레벨에서는 `uiCheck` 명령 유형(`uiCheckCommand`)이 선언되어 있으나, 현재 React 프론트엔드 UI 화면에는 해당 기능 버튼 및 연동 부가 **구현되어 있지 않습니다**.
-
----
-
-## 프로젝트 구조
+코딩 에이전트는 강력하지만, 모호한 채팅 대화는 종종 방향을 잃은 구현으로 이어집니다.  
+LAO는 아이디어와 코드 사이에 강력한 **기획 및 명세 검증 레이어**를 추가합니다.
 
 ```
-LAO/
-├── cli/                 # Express 백엔드 서버 및 CLI AI 실행부
-│   ├── src/
-│   │   ├── agents/      # 오케스트레이터, 프롬프트 빌더, 목업 생성기 및 기획 하네스
-│   │   │   ├── harness.ts      # [NEW] PlanningHarness (규격 검증 및 Linter)
-│   │   │   ├── orchestrator.ts # 마이크로 에이전트 자가보정 루프 및 코디네이터
-│   │   │   └── promptBuilder.ts# 에이전트용 피드백 피처 템플릿 빌더
-│   │   ├── compiler.ts  # 명세서 마크다운 컴파일러
-│   │   ├── gemini.ts    # spawn 셸 프로세스 연동 및 stdin 파이핑 정규화
-│   │   ├── index.ts     # Express 엔드포인트, SSE 스트림 및 Debounce 스로틀
-│   │   ├── scheduler.ts # [NEW] SpawnQueueManager (동시성 큐 및 타이머 가드)
-│   │   └── storage.ts   # .lao 로컬 저장소 및 설정 관리
-│   └── package.json
-└── web/                 # React 프론트엔드 (Vanilla CSS 레이아웃)
-    ├── src/
-    │   ├── App.tsx      # 메인 대시보드, 에이전트 스트리밍 중계 및 수동 중재(HITL) 패널
-    │   └── types.ts     # 공유 TS 타입 정의
-    └── package.json
+Idea ➔ Spec Sprout ➔ Decision Cards ➔ Spec Lock ➔ DevLoop
 ```
 
 ---
 
-## 시작 가이드 (Quick Start)
+## Who is it for?
 
-### 필수 조건
-* **Node.js** v18.0.0 이상
-* **npm** v9.0.0 이상
-* **Yarn** (선택) - Yarn 패키지 매니저를 사용하는 경우
-* 로컬 머신에 로그인 및 설정된 AI CLI 도구:
-  * **Gemini CLI**: `gemini` (기본값)
-  * **Claude CLI**: `claude` (Claude Engineer)
-  * **Codex CLI**: `codex`
-  * **Antigravity CLI**: `agy` (선택)
-  * **Cursor CLI**: `cursor` (Cursor Agent CLI) (선택)
+- Claude Code, Codex, Gemini CLI, Cursor 등의 로컬 AI 에이전트를 사용하는 **개발자** (설정 및 커스텀 가능)
+- 구현에 들어가기 전에 구조화된 설계를 원하는 **1인 빌더(Solo Builder)**
+- 파편화된 AI 채팅 로그 대신 재사용 가능한 명세서를 구축하려는 **개발 팀**
 
-### 설치 및 구동 방법
+---
+
+## 핵심 개념 (Core Concepts)
+
+- **Local CLI AI Engine**: 로컬 CLI 환경을 직접 연동하여 오케스트레이션 오버헤드를 최소화하고 초고속 연산을 수행합니다.
+- **Director + Specialized Agents**: 디렉터 에이전트의 안내에 따라 단계별 전문 에이전트가 협업합니다.
+- **Golden Rules**: 명세서에 강제되는 프로그래밍 방식의 기술 스택 및 포맷 제약 조건입니다.
+- **Decision Cards**: 명세서 잠금 전 합의하는 기획 단계의 마이크로 의사결정 카드입니다.
+- **Compiled Spec**: 프로젝트의 단일 진실 공급원(Single Source of Truth) 역할을 하는 명세서입니다.
+- **Handover Gate**: 명세서와 코드 간의 불일치(Drift)를 줄여주는 명세 잠금 장치입니다.
+- **DevLoop Console**: 개발 단계에서 로컬 빌드, 구동 및 검증을 돕는 통합 콘솔입니다.
+
+---
+
+## 시작 가이드 (Quick Start for Existing CLI Users)
+
+### 필수 조건 (Prerequisites)
+- Node.js v18.0.0 이상
+- 설정 가능한 로컬 AI CLI 도구 (`gemini`, `claude`, `codex`, `cursor` 등) 로그인 및 인증 완료
+
+### 1. 글로벌 설치
+GitHub에서 직접 LAO를 글로벌 패키지로 설치합니다.
+
 ```bash
-# 전체 프로젝트 의존성 설치 및 자동 빌드 수행
-npm install
+# yarn을 사용하는 경우
+yarn global add git+https://github.com/naka98/LAO.git
 
-# 애플리케이션 시작 (로컬 포트 4000 구동)
-npm start
+# 또는 npm을 사용하는 경우
+npm install -g git+https://github.com/naka98/LAO.git
 ```
+
+### 2. 실행하기
+기획을 진행할 프로젝트의 루트 폴더로 이동하여 아래 명령어를 실행합니다.
+
+```bash
+lao
+```
+LAO 로컬 서버가 `4000`번 포트에서 시작되며, 기본 브라우저에 가이드 기획 워크스페이스 대시보드가 자동으로 열립니다 (`http://localhost:4000`).
 
 ---
 
-## 환경 변수 설정
+## 상세 문서 읽기
 
-`cli` 디렉터리 하위에 `.env` 파일을 생성하여 기본 프로바이더 및 로컬 CLI 경로를 지정할 수 있습니다:
+- 📄 [왜 LAO가 필요한가?](./docs/why-lao.ko.md)
+- 📐 [아키텍처 전환 배경](./docs/v0.9_architecture.ko.md)
+- ⚙️ [운영 원칙](./docs/operating-principles.ko.md)
 
-```env
-# 기본 프로바이더 및 모델 오버라이드
-LAO_PROVIDER=gemini       # 사용할 CLI 지정 (gemini | claude | codex | agy | cursor)
-LAO_MODEL=                # (선택) 모델명 수동 지정
+<details>
+<summary>🛠️ 로컬 개발 환경 구성 (기여용)</summary>
 
-# [v0.9.3 추가] 커스텀 로컬 CLI 명령어 경로 바인딩 (PATH 자동 탐색에 실패하거나 수동 지정 필요 시)
-LAO_PROVIDER_CLAUDE_CLI=/opt/homebrew/bin/claude
-LAO_PROVIDER_GEMINI_CLI=/usr/local/bin/gemini
-LAO_PROVIDER_CODEX_CLI=
-LAO_PROVIDER_CURSOR_CLI=
-LAO_PROVIDER_AGY_CLI=
+소스를 클론하여 로컬에서 수정하며 구동하려는 경우:
+
+```bash
+# 저장소 복제 및 이동
+git clone https://github.com/naka98/LAO.git
+cd LAO
+
+# 의존성 설치 및 실행
+npm install # 또는 yarn install
+npm start   # 또는 yarn start
 ```
+</details>
 
-### 아이디어 선정 및 온보딩 시 제약 사항
-* `selectedOptionKey` 주의: TS 인터페이스 모델 구조상 기술 가드레일 설정 시 `'custom'` 옵션이 기재되어 있으나, 실제 아이디어 선정용 백엔드 API 엔드포인트 `/api/project/intake/select` 에서는 유효성 검증을 통해 오로지 **`'A' | 'B' | 'C'` 값만 허용**하도록 동작합니다. 커스텀 키를 전달하면 400 Bad Request 에러가 발생합니다.
+<details>
+<summary>⚙️ 기술적 특징 및 아키텍처 상세 (v0.9.3)</summary>
 
----
+### 1. 초고속 로컬 CLI AI 엔진 및 E2BIG 우회
+- 무거운 로그인 셸 실행 대신 비로그인 셸(`-c`)을 사용하여 CLI 구동 지연 오버헤드를 10ms 수준으로 단축했습니다.
+- UNIX 계열의 인수 크기 제한(`E2BIG` 에러)을 우회하기 위해 프롬프트 전체를 표준 파일 리다이렉션(`<`) 형태로 주입합니다.
 
-## 라이선스
+### 2. 동시성 통제 스케줄러 큐 (Spawn Queue)
+- CPU 자원 폭주와 SQLite DB 잠금 에러(`SQLITE_BUSY`)를 예방하기 위해 동시 실행 태스크를 최대 2개로 제한합니다.
+- 중복되는 대기 요청을 큐에서 자동으로 Evict하고, 90초 초과 시 orphan 프로세스를 강제 종료합니다.
 
-이 프로젝트는 MIT 라이선스에 따라 라이선스가 부여됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하십시오.
+### 3. 기획 검증 하네스 및 자가 교정
+- Given-When-Then 문법 규격 및 필수 섹션 포함 여부를 Linter로 기계적 검증합니다.
+- 실패 시 에러 피드백을 프롬프트 버퍼에 주입하여 최대 3회 자가 교정을 실행합니다.
+- 프로젝트 루트의 `RULES.md` 파일과 연동하여 커스텀 기술 가드레일을 강제할 수 있습니다.
+
+### 4. 수동 중재 및 강제 승인 UI (Human-In-The-Loop)
+- 자가 교정 루프 3회 실패 시, 대화창에 붉은색 검증 오류 경고 카드가 렌더링됩니다.
+- 개발자는 기획안을 버리지 않고 **[강제 승인 (Force Commit)]** 버튼으로 우회 저장할 수 있습니다.
+
+### 5. 다중 에이전트 협업 및 컨텍스트 경량화
+- 디렉터가 각 분야별 스텝 에이전트에게 작업을 중계합니다.
+- 에이전트별 필요한 명세서 조각만 잘라서 전달하는 **Context Budgeting** 기법을 적용합니다.
+
+### 6. DevLoop 콘솔 및 실시간 SSE 스트리밍
+- 기획 잠금 상태에서 `build`, `launch`, `verify` 명령을 실행할 수 있습니다.
+- 백엔드 연산 상황을 Server-Sent Events (SSE) 진단 스트림 메시지를 브라우저 UI 화면에 직접 중계하여 대기 피로도를 줄여줍니다.
+
+</details>
