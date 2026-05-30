@@ -176,13 +176,17 @@ export class GeminiClient {
     systemInstruction?: string;
     jsonMode?: boolean;
     model?: string;
-    role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
+    role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' | 'mockup';
     nodeId?: string;
     onChunk?: (chunk: string) => void;
   }): Promise<string> {
     let attempts = 0;
     const maxAttempts = 3;
     let delay = 2000; // 초기 백오프 딜레이 2초
+    
+    // Fallback CLI용 프로바이더 순서 정의
+    const fallbackProviders = ['gemini', 'claude', 'codex'];
+    let currentProviderIndex = -1;
 
     while (attempts < maxAttempts) {
       try {
@@ -197,12 +201,39 @@ export class GeminiClient {
           await new Promise(resolve => setTimeout(resolve, delay));
           delay *= 2; // 지수 백오프 곱연산
         } else {
-          // 일반 에러(바이너리 없음 등)이거나 재시도 초과 시 즉시 에러 방출
-          throw error;
+          // 바이너리 없음, 인증 오류, 혹은 일반 에러인 경우 다른 CLI로의 Fallback 스위칭 시도 (Gap 4 해결)
+          console.warn(`[LAO Core] CLI generation failed due to: ${status}. Attempting Fallback Provider...`);
+          
+          let currentProvider = this.defaultProvider;
+          const configPath = path.join(process.cwd(), '.lao', 'lao.config.json');
+          if (fs.existsSync(configPath)) {
+            try {
+              const raw = fs.readFileSync(configPath, 'utf8');
+              const config = JSON.parse(raw);
+              if (config.settings && config.settings.provider) {
+                currentProvider = config.settings.provider.toLowerCase();
+              }
+            } catch {}
+          }
+          
+          const candidates = fallbackProviders.filter(p => p !== currentProvider);
+          if (candidates.length > 0 && currentProviderIndex < candidates.length - 1) {
+            currentProviderIndex++;
+            const fallbackProvider = candidates[currentProviderIndex];
+            console.log(`[LAO Core] Switching provider to Fallback CLI: "${fallbackProvider}"`);
+            
+            try {
+              return await this.executeCli({ ...params, fallbackProvider });
+            } catch (fallbackErr: any) {
+              console.error(`[LAO Core] Fallback CLI "${fallbackProvider}" also failed:`, fallbackErr.message);
+            }
+          } else {
+            throw error;
+          }
         }
       }
     }
-    throw new Error('CLI Request Failed after maximum backoff retries.');
+    throw new Error('CLI Request Failed after maximum backoff retries and fallback options.');
   }
 
   /**
@@ -213,17 +244,18 @@ export class GeminiClient {
     systemInstruction?: string;
     jsonMode?: boolean;
     model?: string;
-    role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
+    role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' | 'mockup';
     nodeId?: string;
     onChunk?: (chunk: string) => void;
+    fallbackProvider?: string;
   }): Promise<string> {
-    let provider = this.defaultProvider;
+    let provider = params.fallbackProvider || this.defaultProvider;
     let model = params.model || this.defaultModel;
     const jsonMode = !!params.jsonMode;
 
     // Load settings dynamically from lao.config.json if it exists
     const configPath = path.join(process.cwd(), '.lao', 'lao.config.json');
-    if (fs.existsSync(configPath)) {
+    if (fs.existsSync(configPath) && !params.fallbackProvider) {
       try {
         const raw = fs.readFileSync(configPath, 'utf8');
         const config = JSON.parse(raw);
@@ -232,8 +264,8 @@ export class GeminiClient {
         let targetProvider = settings.provider;
         let targetModel = settings.model;
         
-        if (params.role && settings.agents && settings.agents[params.role]) {
-          const agentConfig = settings.agents[params.role];
+        if (params.role && settings.agents && settings.agents[params.role as any]) {
+          const agentConfig = settings.agents[params.role as any];
           targetProvider = agentConfig.provider || targetProvider;
           targetModel = agentConfig.model !== undefined ? agentConfig.model : targetModel;
         }
@@ -522,8 +554,12 @@ export class GeminiClient {
  * 에이전트 역할별로 스케줄링 큐의 카테고리를 할당합니다.
  */
 function categoryMapping(role?: string): 'inference' | 'mockup' | 'build' {
+  if (role === 'mockup') {
+    return 'mockup';
+  }
   if (role === 'director' || role === 'specifier' || role === 'researcher' || role === 'optionizer' || role === 'gapDetector') {
     return 'inference';
   }
   return 'inference';
 }
+

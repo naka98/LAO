@@ -11,6 +11,7 @@ import { activeProcesses, getShellInfo, GeminiClient } from './gemini';
 import { randomUUID } from 'crypto';
 import { NodeMessage } from './models';
 import { MockupGenerator } from './agents/mockupGenerator';
+import { PlanningHarness } from './agents/harness';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -299,21 +300,29 @@ app.post('/api/project/intake/select', async (req, res) => {
     // 1. Sprout spec sections using AI, conforming to chosen option and custom adjustments
     const sprouted = await orchestrator.runIntakeSprout(config, chosenOption, userAdjustments);
 
-    // Save core spec
+    // Save core spec as draft
     const now = new Date().toISOString();
-    storage.writeSpecSection({
+    const coreSpecSection = {
       id: 'core_spec',
       title: 'Core Architecture Spec',
       content: sprouted.coreSpec,
-      status: 'active',
+      status: 'active' as const,
       createdAt: now,
       updatedAt: now
+    };
+    storage.writeDraftSpecSection(coreSpecSection);
+
+    // Save spawned features as draft
+    sprouted.features.forEach(feat => {
+      storage.writeDraftSpecSection(feat);
     });
 
-    // Save spawned features
+    // Commit specs from draft (since intake sprout already handles harness internally)
+    storage.commitDraftSpecSection('core_spec');
     sprouted.features.forEach(feat => {
-      storage.writeSpecSection(feat);
+      storage.commitDraftSpecSection(feat.id);
     });
+
 
     // 2. Propose decision cards if needed
     let decisions: any[] = [];
@@ -353,6 +362,16 @@ app.get('/api/project/gap-check', async (req, res) => {
     const sections = storage.readSpecs();
     const review = await orchestrator.runGapDetectorReview(config, sections);
     res.json({ review });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 13.2. Local environment diagnostics
+app.get('/api/diagnostics', async (req, res) => {
+  try {
+    const report = await PlanningHarness.runDiagnostics();
+    res.json(report);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -427,26 +446,36 @@ app.get('/api/chat/stream', async (req, res) => {
     messages.push(agentMsg);
     storage.writeMessages(messages);
 
-    // Process spec update if returned AND validation passed (샌드박스 스테이징 원자적 커밋)
-    if (result.specUpdate && !result.validationErrors) {
+    // Process spec update if returned (샌드박스 드래프트 스테이징 및 원자적 커밋)
+    if (result.specUpdate) {
       const existing = sections.find(s => s.id === result.specUpdate!.sectionId);
       const updatedSection = {
         id: result.specUpdate.sectionId,
         title: result.specUpdate.title || (existing ? existing.title : 'Untitled Feature'),
         content: result.specUpdate.content,
-        status: existing ? existing.status : 'active',
+        status: (existing ? existing.status : 'active') as 'active' | 'deprecated',
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now
       };
-      storage.writeSpecSection(updatedSection);
 
-      // Recompile
-      const recompiledSections = storage.readSpecs();
-      const md = SpecCompiler.compile(config, recompiledSections);
-      storage.writeCompiledSpec(md);
-    } else if (result.specUpdate && result.validationErrors) {
-      console.warn('[LAO Core] specUpdate rejected due to validation failures:', result.validationErrors);
+      // 1. 임시 드래프트 파일 작성
+      storage.writeDraftSpecSection(updatedSection);
+
+      if (!result.validationErrors) {
+        // 2. 검증 성공 시 정식 파일로 커밋 승격
+        storage.commitDraftSpecSection(updatedSection.id);
+
+        // Recompile
+        const recompiledSections = storage.readSpecs();
+        const md = SpecCompiler.compile(config, recompiledSections);
+        storage.writeCompiledSpec(md);
+      } else {
+        // 3. 검증 실패 시 드래프트 파일 롤백(제거)
+        console.warn('[LAO Core] specUpdate rejected due to validation failures:', result.validationErrors);
+        storage.rollbackDraftSpecSection(updatedSection.id);
+      }
     }
+
 
     const shouldUpdateMockup = (!!result.specUpdate && !result.validationErrors) || 
       /디자인|스타일|테마|색상|ui|버튼|레이아웃|화면|미리보기|다크|화이트|폰트|글꼴|우선순위|mockup|preview|style|theme|color|dark|light/i.test(messageStr);

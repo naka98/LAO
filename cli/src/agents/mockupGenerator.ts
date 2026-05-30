@@ -69,7 +69,7 @@ Respond ONLY with the complete HTML code. Do NOT wrap the HTML code in markdown 
     console.log('[LAO MockupGenerator] Querying AI to generate/update mockup...');
     const rawOutput = await this.geminiClient.generateText({
       prompt,
-      role: 'specifier' // Using the specifier config settings or fallback
+      role: 'mockup' // Using the mockup tag for scheduler eviction
     });
 
     // Clean potential markdown fencing from the model response

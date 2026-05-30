@@ -142,6 +142,10 @@ const translations = {
     toastSpecSproutingStarted: "Sprouting specifications based on selected concept...",
     loadingProposals: "Diverging Concepts...",
     loadingProposalsDesc: "Intake Agent is defining multiple routes, Director Agent is analyzing trade-offs, and Conflict Detector is auditing feasibility. Please wait.",
+    diagnosticsTab: "System Diagnostics",
+    runDiagnosticsBtn: "Run Diagnostics",
+    diagnosticsTitle: "Local AI CLI Diagnostics",
+    diagnosticsDesc: "Verify your local environment to ensure that local CLI AI paths and API configurations are properly functional.",
   },
   ko: {
     projectNamePlaceholder: "예: 로컬 데이터베이스 웹 UI",
@@ -245,6 +249,10 @@ const translations = {
     toastSpecSproutingStarted: "선택한 대안을 토대로 사양 명세를 구체화하는 중...",
     loadingProposals: "대안 기획안 발산 중...",
     loadingProposalsDesc: "기획 에이전트가 여러 도메인 접근안을 정의하고, 디렉터 에이전트가 각 장단점을 비교하여 최선의 추천 시나리오를 조율하고 있습니다. 잠시만 기다려 주세요.",
+    diagnosticsTab: "시스템 자가진단",
+    runDiagnosticsBtn: "자가진단 실행",
+    diagnosticsTitle: "로컬 AI CLI 자가진단",
+    diagnosticsDesc: "로컬 환경의 CLI AI 경로 및 API 설정 상태를 진단하여 정상 작동하는지 검사합니다.",
   }
 };
 
@@ -269,7 +277,7 @@ export default function App() {
   const [isGeneratingTasks, setIsGeneratingTasks] = useState(false);
 
   // UI States
-  const [activeTab, setActiveTab] = useState<'spec' | 'devloop' | 'preview' | 'timeline' | 'gaps'>('spec');
+  const [activeTab, setActiveTab] = useState<'spec' | 'devloop' | 'preview' | 'timeline' | 'gaps' | 'diagnostics'>('spec');
   const [previewUrl, setPreviewUrl] = useState('http://localhost:3000');
   const [devLoopExplanation, setDevLoopExplanation] = useState<string | null>(null);
 
@@ -322,6 +330,39 @@ export default function App() {
   const activeEventSourceRef = useRef<EventSource | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Diagnostics Report States
+  const [diagnosticsReport, setDiagnosticsReport] = useState<any[] | null>(null);
+  const [isDiagnosing, setIsDiagnosing] = useState(false);
+
+  const fetchDiagnostics = async () => {
+    try {
+      const res = await fetch('/api/diagnostics');
+      if (res.ok) {
+        setDiagnosticsReport(await res.json());
+      }
+    } catch (e) {
+      console.warn('Failed to pre-fetch diagnostics:', e);
+    }
+  };
+
+  const handleRunDiagnostics = async () => {
+    setIsDiagnosing(true);
+    try {
+      const res = await fetch('/api/diagnostics');
+      if (res.ok) {
+        setDiagnosticsReport(await res.json());
+        showToast(lang === 'ko' ? '로컬 AI CLI 자가진단이 완료되었습니다.' : 'Local AI CLI Diagnostics completed.', 'success');
+      } else {
+        showToast(lang === 'ko' ? '자가진단 실행에 실패했습니다.' : 'Failed to run diagnostics.', 'error');
+      }
+    } catch (e) {
+      showToast(lang === 'ko' ? '자가진단 오류 발생' : 'Error executing diagnostics.', 'error');
+    } finally {
+      setIsDiagnosing(false);
+    }
+  };
+
 
   // Initialize mermaid on mount
   useEffect(() => {
@@ -420,6 +461,7 @@ export default function App() {
 
           // Trigger compilation
           compileSpecs();
+          fetchDiagnostics();
         }
       }
     } catch (e) {
@@ -1886,7 +1928,8 @@ export default function App() {
                 { id: 'devloop', label: t.devloopConsoleTab, icon: Terminal },
                 { id: 'preview', label: t.previewTab, icon: Globe },
                 { id: 'timeline', label: t.decisionTimelineTab, icon: BookOpen },
-                { id: 'gaps', label: t.gapAuditorTab, icon: AlertTriangle }
+                { id: 'gaps', label: t.gapAuditorTab, icon: AlertTriangle },
+                { id: 'diagnostics', label: t.diagnosticsTab, icon: Brain }
               ].map(tab => {
                 const Icon = tab.icon;
                 return (
@@ -2174,6 +2217,83 @@ export default function App() {
                   ) : (
                     <div className="text-xs text-slate-600 italic">
                       {t.gapReportDesc}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* E. Local AI CLI Diagnostics Tab */}
+            {activeTab === 'diagnostics' && (
+              <div className="max-w-2xl mx-auto space-y-4">
+                <div className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-64 h-64 bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
+                  <div className="flex items-center justify-between border-b border-slate-900 pb-4 mb-4">
+                    <div className="flex items-center gap-2">
+                      <Brain className="w-5 h-5 text-violet-400" />
+                      <span className="text-sm font-bold text-slate-200">{t.diagnosticsTitle}</span>
+                    </div>
+                    <button
+                      onClick={handleRunDiagnostics}
+                      disabled={isDiagnosing}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-xs text-white rounded-lg font-bold transition-all"
+                    >
+                      {isDiagnosing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCw className="w-3.5 h-3.5" />}
+                      {t.runDiagnosticsBtn}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-450 mb-6 leading-relaxed">
+                    {t.diagnosticsDesc}
+                  </p>
+
+                  {diagnosticsReport ? (
+                    <div className="space-y-3">
+                      {diagnosticsReport.map((item: any) => (
+                        <div key={item.provider} className="bg-slate-950/40 border border-slate-900 rounded-xl p-4 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-350 uppercase">{item.provider}</span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
+                              item.status === 'ok' 
+                                ? 'bg-emerald-500/20 text-emerald-400' 
+                                : item.status === 'missing' 
+                                ? 'bg-red-500/20 text-red-400' 
+                                : 'bg-amber-500/20 text-amber-400'
+                            }`}>
+                              {item.status === 'ok' ? 'OK' : item.status === 'missing' ? 'MISSING' : 'EXPIRED'}
+                            </span>
+                          </div>
+                          {item.reason && (
+                            <p className="text-[10px] text-slate-500 leading-normal font-mono bg-slate-950/80 p-2.5 rounded-lg border border-slate-900">
+                              {item.reason}
+                            </p>
+                          )}
+                          {item.status !== 'ok' && (
+                            <div className="text-[10px] text-slate-450 bg-slate-900/10 p-2 rounded-lg border border-slate-900/50">
+                              <span className="font-bold text-violet-400">💡 복구 가이드:</span>{' '}
+                              {item.provider === 'claude' && (
+                                <span>시스템 터미널에 ANTHROPIC_API_KEY 환경변수가 올바르게 정의되어 있는지 확인하세요. export ANTHROPIC_API_KEY="your-key"</span>
+                              )}
+                              {item.provider === 'gemini' && (
+                                <span>시스템 터미널에 GEMINI_API_KEY 환경변수가 올바르게 정의되어 있는지 확인하세요. export GEMINI_API_KEY="your-key"</span>
+                              )}
+                              {item.provider !== 'claude' && item.provider !== 'gemini' && (
+                                <span>해당 CLI가 전역 PATH(예: /usr/local/bin)에 설치되어 있고 로그인되어 있는지 확인하세요. 또는 .env 파일에 LAO_PROVIDER_{item.provider.toUpperCase()}_CLI 경로를 수동 지정하십시오.</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : isDiagnosing ? (
+                    <div className="flex flex-col items-center justify-center py-10 space-y-3">
+                      <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                      <span className="text-xs text-slate-400 font-medium">
+                        {lang === 'ko' ? '로컬 CLI 상태 진단 중...' : 'Diagnosing local CLI statuses...'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-slate-600 italic text-center py-6">
+                      {lang === 'ko' ? '자가진단 실행 버튼을 클릭하여 진단을 시작하세요.' : 'Click Run Diagnostics to analyze environment.'}
                     </div>
                   )}
                 </div>

@@ -231,6 +231,59 @@ export class StorageManager {
   }
 
   /**
+   * Writes a spec section as a draft file (.md.draft)
+   */
+  public writeDraftSpecSection(section: SpecSection): void {
+    const metadata = {
+      id: section.id,
+      title: section.title,
+      status: section.status,
+      createdAt: section.createdAt,
+      updatedAt: new Date().toISOString(),
+    };
+    const content = this.stringifyFrontmatter(metadata, section.content);
+    
+    if (section.id === 'core_spec') {
+      fs.writeFileSync(path.join(this.specsDirPath, 'core_spec.md.draft'), content, 'utf8');
+    } else {
+      fs.writeFileSync(path.join(this.featuresDirPath, `${section.id}.md.draft`), content, 'utf8');
+    }
+  }
+
+  /**
+   * Commits a draft section by renaming it to the final spec file
+   */
+  public commitDraftSpecSection(id: string): void {
+    const draftPath = id === 'core_spec'
+      ? path.join(this.specsDirPath, 'core_spec.md.draft')
+      : path.join(this.featuresDirPath, `${id}.md.draft`);
+    const finalPath = id === 'core_spec'
+      ? path.join(this.specsDirPath, 'core_spec.md')
+      : path.join(this.featuresDirPath, `${id}.md`);
+    
+    if (fs.existsSync(draftPath)) {
+      fs.renameSync(draftPath, finalPath);
+    }
+  }
+
+  /**
+   * Rolls back a draft spec file by unlinking it
+   */
+  public rollbackDraftSpecSection(id: string): void {
+    const draftPath = id === 'core_spec'
+      ? path.join(this.specsDirPath, 'core_spec.md.draft')
+      : path.join(this.featuresDirPath, `${id}.md.draft`);
+    
+    if (fs.existsSync(draftPath)) {
+      try {
+        fs.unlinkSync(draftPath);
+      } catch (e) {
+        console.warn(`Failed to unlink draft file at ${draftPath}:`, e);
+      }
+    }
+  }
+
+  /**
    * Delete or archive a feature specification file
    */
   public deleteSpecSection(id: string): void {
