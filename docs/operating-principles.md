@@ -78,7 +78,7 @@ The workspace includes a **DevLoop Console** where the developer can run command
 ### 6.1 Planning Harness & Self-Correction
 To ensure specifications remain structured and bug-free, LAO employs a programmatic `PlanningHarness`:
 * **Validation Rules**: Asserts that the core spec defines Out-of-Scope items, and feature specs contain structured User Stories and Given-When-Then Acceptance Criteria.
-* **Golden Rule Linter**: Compares outputs against the root `RULES.md` file.
+* **Golden Rule Linter (Manual Activation)**: Compares outputs against the root `RULES.md` file. Note that `RULES.md` is **not created by default**; developers must manually initialize `RULES.md` in the project root to activate this linting check.
 * **Self-Correction Loop**: Validates spec edits automatically, attempting to auto-correct failures up to 3 times via validation feedback.
 * **Force Commit (HITL Bypass)**: If self-correction fails, developers are presented with validation error logs and can choose to "Force Commit" the section, overriding the harness.
 
@@ -88,3 +88,8 @@ Local CLI tool executions are managed via a priority queue:
 * **Mockup Deduplication**: Evicts obsolete mockup rendering tasks when new ones are queued.
 * **Zombie Process Protection**: Enforces a 90-second timeout guard, killing stuck processes with SIGKILL.
 * **Shell Optimization**: Uses `zsh -c` on macOS to bypass login shell delays (~10ms startup overhead).
+* **Failover Fallback Chain**: Automatically switches executing CLI tools sequentially (`gemini` ➔ `claude` ➔ `codex`) if primary tool executions fail due to path/auth errors.
+
+### 6.3 Limitations & Ghost Features
+* **uiCheck command**: Backend support for `uiCheckCommand` and `/api/devloop/run?kind=uiCheck` exists, but there is no frontend representation for it in the Web UI.
+* **Intake selector restrictions**: Intake select API strictly requires options `'A' | 'B' | 'C'`. The config model `'custom'` key option is not supported by the onboarding selection API.

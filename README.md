@@ -21,15 +21,20 @@ LAO was originally designed with a visual React Flow mindmap canvas. In v0.9, we
 2. **Planning Harness & Self-Correction**:
    * Programmatically asserts (Linter) sprouted or updated specs for formatting constraints (e.g., given-when-then acceptance criteria, out of scope section).
    * Runs up to 3 self-correction iterations injecting harness feedback directly into prompt buffers.
+   * **Note on Custom Rules**: Integrates with a `RULES.md` file in the project root to check for tech-stack violations. Note that `RULES.md` is **not created by default**; developers must manually create this file in the project root to activate custom rules checks.
 3. **Sequential Execution Queue (Spawn Queue)**:
    * Throttles active process spawning to `maxConcurrency = 2` to prevent macOS freeze and CLI SQLite database locks (`SQLITE_BUSY`).
    * Evicts duplicate pending mockup requests and cleans up orphan processes via a 90-second timeout force-kill (`SIGKILL`).
+   * **Failover Fallback Chain**: If the primary AI provider CLI fails (due to path or authentication errors), the system automatically attempts fallback execution in the order of `gemini` ➔ `claude` ➔ `codex`.
 4. **Human-In-The-Loop (HITL) Intervention UI**:
    * Renders a warning box with specific validation errors on the chat interface when 3 self-correction loops fail.
    * Provides a **[Force Commit]** bypass button, letting the developer manually override harness rules and save the specification as-is.
 5. **Multi-Agent Collaboration**: Features a centralized "Director" agent routing inputs to specialized step agents, applying **Context Budgeting** to slice and send only relevant spec files.
 6. **Real-time SSE Status Streaming**: Streams active agent and harness pipeline diagnostics (e.g., *"🔍 [Harness] Asserting Given-When-Then rules..."*) directly to the loader terminal to lower user waiting fatigue.
 7. **5-Second Mockup Debouncing**: Throttles mockup preview generation (`MockupGenerator`) behind a 5-second debounce timer to prevent system fans from overheating during high-frequency chats.
+8. **DevLoop Console Limits**:
+   * Supports `build`, `launch`, and `verify` command executions.
+   * *Ghost Feature Note*: The backend models and API support a `uiCheck` command type (`uiCheckCommand` in config), but this is currently a backend-only definition and **not implemented** in the React Web UI frontend.
 
 ---
 
@@ -97,6 +102,10 @@ LAO_PROVIDER_GEMINI_CLI=/usr/local/bin/gemini
 LAO_PROVIDER_CODEX_CLI=
 LAO_PROVIDER_CURSOR_CLI=
 LAO_PROVIDER_AGY_CLI=
+```
+
+### Intake Selection Constraints
+* Note on `selectedOptionKey`: While the typescript interface models support a `'custom'` type option in configuration settings, the API onboarding selector endpoint (`/api/project/intake/select`) currently **strictly validates** and only accepts `'A' | 'B' | 'C'`. Custom options are currently not supported via the intake API endpoint.
 ```
 
 ---
