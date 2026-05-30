@@ -49,6 +49,7 @@ ${params.userMessage}
     goldenRules: GoldenRules;
     chosenOption?: any;
     userAdjustments?: string;
+    feedback?: string;
   }): string {
     const optionBlock = params.chosenOption ? `
 ## Chosen Planning Concept
@@ -67,10 +68,18 @@ ${(params.chosenOption.scope || []).map((s: string) => `  * ${s}`).join('\n')}
 "${params.userAdjustments}"
 ` : '';
 
+    const feedbackBlock = params.feedback ? `
+## [필독] 이전 생성에서의 검증 검토 피드백
+당신이 이전에 생성한 사양서 구조에 다음과 같은 검증 실패 및 누락 오류가 발생했습니다.
+이번 생성 시에는 이 피드백 오류 사항을 반드시 반영하여 완벽하게 규격을 충족시키십시오:
+${params.feedback}
+` : '';
+
     return `
 You are the **Specifier**. Your job is to translate the following rough idea into a structured draft specification (both the Core Spec and 2 to 4 primary feature sections) under the strict constraints of the Golden Rules.
 ${optionBlock}
 ${adjustmentsBlock}
+${feedbackBlock}
 
 ## Project Title
 ${params.projectName}
@@ -300,6 +309,7 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     sections: SpecSection[];
     chatHistory: NodeMessage[];
     userMessage: string;
+    feedback?: string;
   }): string {
     let roleDescription = '';
     if (params.agentType === 'specifier') {
@@ -315,8 +325,16 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     const historyBlock = this.chatHistorySection(params.chatHistory);
     const specsBlock = params.sections.map(s => `### ${s.title}\n${s.content}`).join('\n\n');
 
+    const feedbackBlock = params.feedback ? `
+## [필독] 기획 하네스 검증 실패 수정 요청
+직전에 제출한 specUpdate가 기획 가이드라인 검증을 통과하지 못했습니다.
+아래 피드백 사유를 바탕으로 오류 사항을 완벽히 수정한 specUpdate JSON 마크다운을 재작성해주십시오:
+${params.feedback}
+` : '';
+
     return `
 ${roleDescription}
+${feedbackBlock}
 
 Analyze the project specs and user messages. Conform to the Golden Rules.
 Respond with:

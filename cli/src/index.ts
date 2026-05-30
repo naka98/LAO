@@ -19,6 +19,9 @@ const PROJECT_ROOT = process.cwd();
 const storage = new StorageManager(PROJECT_ROOT);
 const orchestrator = new AgentOrchestrator();
 
+// 글로벌 Mockup 스로틀 타이머
+let mockupTimeout: NodeJS.Timeout | null = null;
+
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -424,8 +427,8 @@ app.get('/api/chat/stream', async (req, res) => {
     messages.push(agentMsg);
     storage.writeMessages(messages);
 
-    // Process spec update if returned
-    if (result.specUpdate) {
+    // Process spec update if returned AND validation passed (샌드박스 스테이징 원자적 커밋)
+    if (result.specUpdate && !result.validationErrors) {
       const existing = sections.find(s => s.id === result.specUpdate!.sectionId);
       const updatedSection = {
         id: result.specUpdate.sectionId,
@@ -441,23 +444,28 @@ app.get('/api/chat/stream', async (req, res) => {
       const recompiledSections = storage.readSpecs();
       const md = SpecCompiler.compile(config, recompiledSections);
       storage.writeCompiledSpec(md);
+    } else if (result.specUpdate && result.validationErrors) {
+      console.warn('[LAO Core] specUpdate rejected due to validation failures:', result.validationErrors);
     }
 
-    const shouldUpdateMockup = !!result.specUpdate || 
+    const shouldUpdateMockup = (!!result.specUpdate && !result.validationErrors) || 
       /디자인|스타일|테마|색상|ui|버튼|레이아웃|화면|미리보기|다크|화이트|폰트|글꼴|우선순위|mockup|preview|style|theme|color|dark|light/i.test(messageStr);
 
     if (shouldUpdateMockup) {
       // Write chunk to stream notifying of mockup generation
-      res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 변경된 기획안을 바탕으로 시안 미리보기를 업데이트하고 있습니다...)*' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 5초의 스로틀 대기 후 변경된 기획안 시안 미리보기를 갱신합니다...)*' })}\n\n`);
       res.write(`data: ${JSON.stringify({ type: 'mockup_updating' })}\n\n`);
 
-      try {
-        const currentSections = storage.readSpecs();
-        await MockupGenerator.generateOrUpdate(PROJECT_ROOT, config, currentSections, messageStr);
-      } catch (err: any) {
-        console.error('[LAO Core] Mockup generation failed:', err);
-        res.write(`data: ${JSON.stringify({ type: 'content', chunk: `\n\n*(경고: 시안 미리보기 업데이트 실패: ${err.message})*` })}\n\n`);
-      }
+      if (mockupTimeout) clearTimeout(mockupTimeout);
+      mockupTimeout = setTimeout(async () => {
+        try {
+          const currentSections = storage.readSpecs();
+          await MockupGenerator.generateOrUpdate(PROJECT_ROOT, config, currentSections, messageStr);
+          console.log('[LAO Core] Mockup rendering updated after 5s debounce.');
+        } catch (err: any) {
+          console.error('[LAO Core] Mockup generation failed:', err);
+        }
+      }, 5000); // 5초 디바운싱(스로틀 가드)
     }
 
     // Send final completed payload
@@ -467,6 +475,7 @@ app.get('/api/chat/stream', async (req, res) => {
       reasoning: result.reasoning,
       prose: result.prose,
       specUpdate: result.specUpdate,
+      validationErrors: result.validationErrors, // 검증 에러 목록 전송
       messages,
       sections: storage.readSpecs()
     };

@@ -315,6 +315,9 @@ export default function App() {
   // Routing and SSE stream states
   const [routingStatus, setRoutingStatus] = useState<{ isRouting: boolean; route?: string; reasoning?: string }>({ isRouting: false });
   const [isMockupUpdating, setIsMockupUpdating] = useState(false);
+  const [harnessStatus, setHarnessStatus] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[] | null>(null);
+  const [lastRejectedSpec, setLastRejectedSpec] = useState<{ sectionId: string; title?: string; content: string } | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
   const activeEventSourceRef = useRef<EventSource | null>(null);
   const logsEndRef = useRef<HTMLDivElement | null>(null);
@@ -595,6 +598,30 @@ export default function App() {
     setEditingContent(section.content);
   };
 
+  // 4.5. 기획 하네스 예외 수동 강제 승인 (Force Commit / HITL)
+  const handleForceCommit = async () => {
+    if (!lastRejectedSpec) return;
+    try {
+      const res = await fetch('/api/specs/edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: lastRejectedSpec.sectionId,
+          title: lastRejectedSpec.title || 'Untitled Section',
+          content: lastRejectedSpec.content
+        })
+      });
+      if (res.ok) {
+        showToast('기획안이 하네스 예외로 강제 반영되었습니다.', 'success');
+        setValidationErrors(null);
+        setLastRejectedSpec(null);
+        fetchProjectData();
+      }
+    } catch (e) {
+      showToast('수동 강제 반영에 실패했습니다.', 'error');
+    }
+  };
+
   const handleSaveEdit = async (sectionId: string) => {
     try {
       const section = sections.find(s => s.id === sectionId);
@@ -750,6 +777,8 @@ export default function App() {
             reasoning: data.reasoning
           });
           currentAgent = data.route;
+        } else if (data.type === 'status') {
+          setHarnessStatus(data.chunk || null);
         } else if (data.type === 'mockup_updating') {
           setIsMockupUpdating(true);
         } else if (data.type === 'content') {
@@ -773,6 +802,16 @@ export default function App() {
           setIsSending(false);
           setRoutingStatus({ isRouting: false });
           setIsMockupUpdating(false);
+          setHarnessStatus(null);
+          
+          if (data.validationErrors && data.specUpdate) {
+            setValidationErrors(data.validationErrors);
+            setLastRejectedSpec(data.specUpdate);
+          } else {
+            setValidationErrors(null);
+            setLastRejectedSpec(null);
+          }
+          
           setIframeKey(prev => prev + 1);
           fetchProjectData(); // Reload full states (spec, features, messages)
         } else if (data.type === 'error') {
@@ -780,6 +819,7 @@ export default function App() {
           setIsSending(false);
           setRoutingStatus({ isRouting: false });
           setIsMockupUpdating(false);
+          setHarnessStatus(null);
           showToast(`Agent error: ${data.error}`, 'error');
         }
       } catch (e) {
@@ -1701,6 +1741,43 @@ export default function App() {
             </div>
           )}
 
+          {/* 기획 하네스 반려 오류 경고 패널 (HITL) */}
+          {validationErrors && lastRejectedSpec && (
+            <div className="bg-red-950/20 border border-red-900/50 rounded-2xl p-5 text-xs space-y-3.5 relative overflow-hidden animate-fade-in">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-2xl pointer-events-none" />
+              <div className="flex items-center gap-2 text-red-200 font-bold border-b border-red-900/20 pb-2.5">
+                <AlertTriangle className="w-4 h-4 text-red-400 animate-pulse animate-duration-1000" />
+                <span>기획 하네스 검증 통과 실패 (반려)</span>
+              </div>
+              <p className="text-slate-400 text-[10px] leading-relaxed">
+                AI가 제안한 명세 변경 사항이 기획 가이드라인 규격을 충족하지 못해 저장이 보류되었습니다.
+              </p>
+              <ul className="list-disc pl-4.5 space-y-1 text-red-350 font-medium text-[11px]">
+                {validationErrors.map((err, idx) => <li key={idx}>{err}</li>)}
+              </ul>
+              <div className="flex gap-2 justify-end pt-2.5 border-t border-red-900/10 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValidationErrors(null);
+                    setLastRejectedSpec(null);
+                  }}
+                  className="px-3 py-1.5 bg-slate-950 border border-slate-850 hover:bg-slate-800 rounded-xl text-slate-400 font-bold transition-colors"
+                >
+                  반려창 닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={handleForceCommit}
+                  className="px-3 py-1.5 bg-red-800 hover:bg-red-700 text-white rounded-xl font-bold flex items-center gap-1 shadow-md shadow-red-900/20 transition-colors"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  강제 승인 (Force Commit)
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 2. Interactive Agent Chat Widget */}
           <div className="flex-1 flex flex-col bg-slate-900/30 border border-slate-900 rounded-2xl overflow-visible md:overflow-hidden min-h-[350px]">
             {/* Chat header */}
@@ -1760,9 +1837,18 @@ export default function App() {
                     {routingStatus.route || 'Agent'}
                   </span>
                   <div className="p-3 rounded-2xl bg-slate-900 text-slate-300 rounded-tl-none border border-slate-800/80 flex items-center gap-1 px-4">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                    {harnessStatus ? (
+                      <span className="flex items-center gap-1.5 text-slate-400 font-medium italic animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 text-violet-400 animate-spin" />
+                        {harnessStatus}
+                      </span>
+                    ) : (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </>
+                    )}
                   </div>
                 </div>
               )}

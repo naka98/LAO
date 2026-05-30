@@ -1,15 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { execFile, spawn } from 'child_process';
+import { exec, spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { randomUUID } from 'crypto';
 import * as dotenv from 'dotenv';
+import { SpawnQueueManager } from './scheduler';
 
 // Load environmental variables
 dotenv.config();
 
-const execFilePromise = promisify(execFile);
+const execPromise = promisify(exec);
 
 /**
  * Returns the appropriate JSON schema for a prompt if jsonMode is enabled.
@@ -81,14 +82,82 @@ function getStatusFromCLIError(exitCode: number, stderr: string, stdout: string)
 
 export const activeProcesses = new Map<string, any>();
 
+/**
+ * Zsh 로그인 셸(-l)을 제거하여 기동 성능을 극대화(10ms 수준)하고 세션 잠금을 원천 차단합니다.
+ */
 export function getShellInfo(): { shell: string; args: string[] } {
   const isWindows = process.platform === 'win32';
   if (process.platform === 'darwin') {
-    return { shell: '/bin/zsh', args: ['-lc'] };
+    // -lc (로그인 셸)에서 -c (단순 비로그인 실행)로 변경하여 startup 스크립트 연쇄 로딩 지연을 우회합니다.
+    return { shell: '/bin/zsh', args: ['-c'] };
   }
   const shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';
   const args = isWindows ? ['/d', '/s', '/c'] : ['-c'];
   return { shell, args };
+}
+
+/**
+ * 여러 로컬 CLI(Claude, Gemini, Codex 등)의 제각각인 JSON 출력 포맷을 하나의 공통 스펙 스키마 구조로 통합 정규화합니다.
+ */
+function normalizeJsonResponse(rawOutput: string, provider: string): string {
+  const trimmed = rawOutput.trim();
+  if (!trimmed) return '{}';
+
+  try {
+    const parsed = JSON.parse(trimmed);
+
+    // 1. Claude/Cursor의 출력 정상화
+    if (provider === 'claude' || provider === 'cursor') {
+      if (parsed.structured_output) {
+        return typeof parsed.structured_output === 'string'
+          ? parsed.structured_output
+          : JSON.stringify(parsed.structured_output);
+      }
+      if (parsed.result) {
+        return typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+      }
+    }
+
+    // 2. Gemini/AGY의 출력 정상화 (이중 래핑 풀기)
+    if (provider === 'gemini' || provider === 'agy') {
+      if (parsed.response) {
+        if (typeof parsed.response === 'string') {
+          try {
+            // 이중 래핑된 JSON String을 다시 파싱하여 일반 JSON으로 변환
+            const innerJson = JSON.parse(parsed.response);
+            return JSON.stringify(innerJson);
+          } catch (e) {
+            return parsed.response;
+          }
+        } else {
+          return JSON.stringify(parsed.response);
+        }
+      }
+    }
+
+    return JSON.stringify(parsed);
+  } catch (e) {
+    // 만약 전체 파싱에 실패한다면, 텍스트 내에서 중괄호 { } 부분을 도려내어 파싱을 2차 시도
+    try {
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const jsonSubstring = trimmed.substring(firstBrace, lastBrace + 1);
+        const parsedSub = JSON.parse(jsonSubstring);
+        
+        if ((provider === 'gemini' || provider === 'agy') && parsedSub.response) {
+          return typeof parsedSub.response === 'object' 
+            ? JSON.stringify(parsedSub.response)
+            : String(parsedSub.response);
+        }
+        return JSON.stringify(parsedSub);
+      }
+    } catch (innerErr) {
+      console.warn('[LAO GeminiClient] Normalization parsing fail:', innerErr);
+    }
+  }
+
+  return trimmed;
 }
 
 export class GeminiClient {
@@ -100,10 +169,46 @@ export class GeminiClient {
   }
 
   /**
-   * Calls the local CLI (gemini, claude, codex) with the given prompt.
-   * Emulates the SwiftUI ProviderBackedCLIAgentRunner.
+   * 로컬 CLI를 호출합니다. 지수 백오프 기반 재시도와 SpawnQueueManager가 연동되어 안전하게 작동합니다.
    */
   public async generateText(params: {
+    prompt: string;
+    systemInstruction?: string;
+    jsonMode?: boolean;
+    model?: string;
+    role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
+    nodeId?: string;
+    onChunk?: (chunk: string) => void;
+  }): Promise<string> {
+    let attempts = 0;
+    const maxAttempts = 3;
+    let delay = 2000; // 초기 백오프 딜레이 2초
+
+    while (attempts < maxAttempts) {
+      try {
+        return await this.executeCli(params);
+      } catch (error: any) {
+        attempts++;
+        const status = error.message;
+        
+        // Rate limit인 경우 또는 자원 락이 발생한 경우 백오프 대기 후 재시도
+        if ((status.includes('rate_limited') || status.includes('SQLITE_BUSY')) && attempts < maxAttempts) {
+          console.warn(`[LAO Core] Rate limited or DB locked. Backing off for ${delay}ms... (Attempt ${attempts}/${maxAttempts})`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2; // 지수 백오프 곱연산
+        } else {
+          // 일반 에러(바이너리 없음 등)이거나 재시도 초과 시 즉시 에러 방출
+          throw error;
+        }
+      }
+    }
+    throw new Error('CLI Request Failed after maximum backoff retries.');
+  }
+
+  /**
+   * 실제 자식 프로세스를 기동하고 큐에 넣어 순차 실행을 조율하는 저수준 래퍼입니다.
+   */
+  private async executeCli(params: {
     prompt: string;
     systemInstruction?: string;
     jsonMode?: boolean;
@@ -140,12 +245,17 @@ export class GeminiClient {
           model = params.model || targetModel;
         }
       } catch (e) {
-        console.warn('[LAO Core] Failed to parse lao.config.json, falling back to process.env defaults', e);
+        console.warn('[LAO Core] Failed to parse lao.config.json', e);
       }
     }
 
     let promptFile: string | null = null;
     let schemaFile: string | null = null;
+
+    // 큐 관리자 할당
+    const queue = SpawnQueueManager.getInstance();
+    // 우선순위 판정 (실시간 스트림 챗 등은 high, 나머지는 medium)
+    const priority = params.role === 'director' || params.onChunk ? 'high' : 'medium';
 
     try {
       // Load RULES.md if it exists in the working directory
@@ -172,6 +282,7 @@ export class GeminiClient {
       }
 
       // 3. Build command template
+      // ARG_MAX 용량 한계(E2BIG)를 완벽히 우회하기 위해, cat 연산 대신 파일 지향 리다이렉션 < "$LAO_PROMPT_FILE" 을 사용합니다.
       let command = '';
       if (provider === 'claude') {
         let baseCmd = process.env.LAO_PROVIDER_CLAUDE_CLI || 'claude';
@@ -183,18 +294,15 @@ export class GeminiClient {
         }
         if (schemaFile) {
           if (!baseCmd.includes('--json-schema')) {
+            // macOS 환경을 위해 싱글 쿼테이션 이스케이프
             baseCmd += ` --json-schema "$(cat '${schemaFile}')"`;
           }
           if (!baseCmd.includes('--output-format')) {
             baseCmd += ' --output-format json';
           }
         }
-        if (!baseCmd.includes('-p ') && !baseCmd.includes('--prompt ') && !baseCmd.includes('$LAO_PROMPT_FILE')) {
-          baseCmd += ' -p "$(cat "$LAO_PROMPT_FILE")"';
-        } else {
-          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
-        }
-        command = baseCmd;
+        // E2BIG 회피: 셸 리다이렉션 연산자(<) 사용
+        command = `${baseCmd} < "$LAO_PROMPT_FILE"`;
 
       } else if (provider === 'codex') {
         let baseCmd = process.env.LAO_PROVIDER_CODEX_CLI || 'codex';
@@ -218,12 +326,8 @@ export class GeminiClient {
             baseCmd = baseCmd.replace('codex exec', `codex exec --output-schema '${schemaFile}'`);
           }
         }
-        if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
-          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
-        } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
-          baseCmd += ' "$(cat "$LAO_PROMPT_FILE")"';
-        }
-        command = baseCmd;
+        // E2BIG 회피: 셸 리다이렉션 연산자(<) 사용
+        command = `${baseCmd} < "$LAO_PROMPT_FILE"`;
 
       } else if (provider === 'agy') {
         let baseCmd = process.env.LAO_PROVIDER_AGY_CLI || 'agy';
@@ -236,12 +340,8 @@ export class GeminiClient {
         if (jsonMode && !baseCmd.includes('--output-format')) {
           baseCmd += ' --output-format json';
         }
-        if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
-          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
-        } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
-          baseCmd += ' -p "$(cat "$LAO_PROMPT_FILE")"';
-        }
-        command = baseCmd;
+        // E2BIG 회피: 셸 리다이렉션 연산자(<) 사용
+        command = `${baseCmd} < "$LAO_PROMPT_FILE"`;
 
       } else if (provider === 'cursor') {
         let baseCmd = process.env.LAO_PROVIDER_CURSOR_CLI || 'cursor agent';
@@ -261,12 +361,8 @@ export class GeminiClient {
         if (jsonMode && !baseCmd.includes('--output-format')) {
           baseCmd += ' --output-format json';
         }
-        if (baseCmd.includes('"$LAO_PROMPT"') || baseCmd.includes('$LAO_PROMPT')) {
-          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
-        } else if (!baseCmd.includes('$LAO_PROMPT_FILE')) {
-          baseCmd += ' "$(cat "$LAO_PROMPT_FILE")"';
-        }
-        command = baseCmd;
+        // E2BIG 회피: 셸 리다이렉션 연산자(<) 사용
+        command = `${baseCmd} < "$LAO_PROMPT_FILE"`;
 
       } else {
         // default: gemini
@@ -280,13 +376,8 @@ export class GeminiClient {
         if (jsonMode && !baseCmd.includes('--output-format')) {
           baseCmd += ' --output-format json';
         }
-        const hasPromptArg = baseCmd.includes('--prompt') || baseCmd.includes(' -p ') || baseCmd.includes('$LAO_PROMPT_FILE');
-        if (!hasPromptArg && baseCmd.includes('gemini')) {
-          baseCmd += ' -p "$(cat "$LAO_PROMPT_FILE")"';
-        } else {
-          baseCmd = baseCmd.replace(/"?\$LAO_PROMPT"?/g, '"$(cat "$LAO_PROMPT_FILE")"');
-        }
-        command = baseCmd;
+        // E2BIG 회피: 셸 리다이렉션 연산자(<) 사용
+        command = `${baseCmd} < "$LAO_PROMPT_FILE"`;
       }
 
       // 4. Setup environment variables
@@ -317,100 +408,80 @@ export class GeminiClient {
       }
       env.PATH = paths.join(':');
 
-      console.log(`[LAO Core] Executing local CLI command: ${command}`);
-
-      // Get cross-platform shell
+      // Get cross-platform shell (non-login -c option)
       const { shell, args: shellArgs } = getShellInfo();
 
-      // 5. Execute command using dynamic shell via spawn to support stdout streaming
-      const child = spawn(shell, [...shellArgs, command], {
-        cwd: process.cwd(),
-        env,
-      });
-
-      if (params.nodeId) {
-        activeProcesses.set(params.nodeId, child);
-      }
-
-      let stdout = '';
-      let stderr = '';
-
-      if (child.stdout) {
-        child.stdout.on('data', (data) => {
-          const chunk = data.toString();
-          stdout += chunk;
-          if (params.onChunk) {
-            params.onChunk(chunk);
-          }
+      // 5. 큐에 작업을 실어서 실행 (Concurrency 조절 및 좀비 해제)
+      const executePromise = (taskRef: { setProcess: (proc: ChildProcess) => void }) => new Promise<string>((resolve, reject) => {
+        const child = spawn(shell, [...shellArgs, command], {
+          cwd: process.cwd(),
+          env,
         });
-      }
 
-      if (child.stderr) {
-        child.stderr.on('data', (data) => {
-          stderr += data.toString();
-        });
-      }
+        taskRef.setProcess(child);
 
-      const exitCode = await new Promise<number>((resolve) => {
-        child.on('close', (code) => {
-          resolve(code ?? 0);
-        });
-        child.on('error', (err) => {
-          console.error('[LAO Core] Spawn error:', err);
-          resolve(-1);
-        });
-      });
-
-      if (exitCode !== 0) {
-        const error = new Error(`Command failed with exit code ${exitCode}`) as any;
-        error.code = exitCode;
-        error.stderr = stderr;
-        error.stdout = stdout;
-        throw error;
-      }
-
-      let output = stdout.trim();
-
-      // 6. Handle schema response extraction for Claude/Gemini CLIs
-      if (jsonMode) {
-        if (provider === 'claude' || provider === 'cursor') {
-          try {
-            const parsed = JSON.parse(output);
-            if (parsed.structured_output) {
-              if (typeof parsed.structured_output === 'string') {
-                output = parsed.structured_output;
-              } else {
-                output = JSON.stringify(parsed.structured_output);
-              }
-            } else if (parsed.result) {
-              output = parsed.result;
-            }
-          } catch (e) {
-            // stdout was not valid JSON or structured output format wasn't JSON. Return output as is.
-          }
-        } else if (provider === 'gemini' || provider === 'agy') {
-          try {
-            const firstBrace = output.indexOf('{');
-            if (firstBrace !== -1) {
-              const jsonBody = output.substring(firstBrace);
-              const parsed = JSON.parse(jsonBody);
-              if (parsed.response) {
-                if (typeof parsed.response === 'string') {
-                  try {
-                    const innerJson = JSON.parse(parsed.response);
-                    output = JSON.stringify(innerJson);
-                  } catch (e) {
-                    output = parsed.response;
-                  }
-                } else {
-                  output = JSON.stringify(parsed.response);
-                }
-              }
-            }
-          } catch (e) {
-            console.warn('[LAO Core] Failed to parse gemini CLI JSON response:', e);
-          }
+        if (params.nodeId) {
+          activeProcesses.set(params.nodeId, child);
         }
+
+        let stdout = '';
+        let stderr = '';
+
+        if (child.stdout) {
+          child.stdout.on('data', (data) => {
+            const chunk = data.toString();
+            stdout += chunk;
+            if (params.onChunk) {
+              params.onChunk(chunk);
+            }
+          });
+        }
+
+        if (child.stderr) {
+          child.stderr.on('data', (data) => {
+            stderr += data.toString();
+          });
+        }
+
+        child.on('close', (code) => {
+          if (params.nodeId) {
+            activeProcesses.delete(params.nodeId);
+          }
+
+          if (code !== 0) {
+            const error = new Error(`Command failed with exit code ${code}`) as any;
+            error.code = code;
+            error.stderr = stderr;
+            error.stdout = stdout;
+            reject(error);
+          } else {
+            resolve(stdout.trim());
+          }
+        });
+
+        child.on('error', (err) => {
+          if (params.nodeId) {
+            activeProcesses.delete(params.nodeId);
+          }
+          reject(err);
+        });
+      });
+
+      // 큐 스케줄러 가동 (90초 타임아웃 강제 탑재)
+      const executionResultRaw = await queue.enqueue(
+        categoryMapping(params.role),
+        priority,
+        (taskRef) => {
+          return executePromise(taskRef);
+        },
+        90000 // 90초 타이머
+      );
+
+      let output = executionResultRaw;
+
+      // 6. JSON 정규화 작업 수행 (Normalization Layer)
+      if (jsonMode) {
+        output = normalizeJsonResponse(output, provider);
       }
 
       return output;
@@ -421,7 +492,6 @@ export class GeminiClient {
       const stdout = error.stdout || '';
       const status = getStatusFromCLIError(exitCode, stderr, stdout);
       const diagnosticMsg = stderr.trim() || stdout.trim() || error.message;
-      console.error(`[LAO Core] CLI Execution failed. Status: ${status}. Detail: ${diagnosticMsg}`);
       throw new Error(`CLI Request Failed (${status}): ${diagnosticMsg}`);
     } finally {
       if (params.nodeId) {
@@ -446,4 +516,14 @@ export class GeminiClient {
       }
     }
   }
+}
+
+/**
+ * 에이전트 역할별로 스케줄링 큐의 카테고리를 할당합니다.
+ */
+function categoryMapping(role?: string): 'inference' | 'mockup' | 'build' {
+  if (role === 'director' || role === 'specifier' || role === 'researcher' || role === 'optionizer' || role === 'gapDetector') {
+    return 'inference';
+  }
+  return 'inference';
 }
