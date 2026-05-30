@@ -81,14 +81,25 @@ ${js}
     let result = content;
     for (const patch of patches) {
       if (!patch.search) continue;
+      
+      // 1. Exact match first
       if (result.includes(patch.search)) {
-        result = result.replace(patch.search, patch.replace);
+        result = result.replace(patch.search, () => patch.replace); // Safe from $ replacement sequence corruption
       } else {
-        // Fallback to whitespace normalized matching
-        const normSearch = patch.search.replace(/\s+/g, ' ').trim();
-        const idx = result.replace(/\s+/g, ' ').indexOf(normSearch);
-        if (idx !== -1) {
+        // 2. Fuzzy match fallback
+        const escapedSearch = patch.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Transform spaces between alphanumeric characters into \s+ (must have space)
+        // Transform all other spaces/newlines into \s* (optional spaces)
+        const regexPattern = escapedSearch
+          .replace(/(\w)\s+(\w)/g, '$1\\s+$2')
+          .replace(/\s+/g, '\\s*');
+          
+        const regex = new RegExp(regexPattern);
+        
+        if (regex.test(result)) {
           console.warn(`[LAO MockupGenerator] Fuzzy match used for patch:`, patch.search);
+          result = result.replace(regex, () => patch.replace); // Safe from $ replacement sequence corruption
         } else {
           console.warn(`[LAO MockupGenerator] Search block not found for patch:`, patch.search);
         }

@@ -70,6 +70,7 @@ ${params.userMessage}
     chosenOption?: any;
     userAdjustments?: string;
     feedback?: string;
+    previousAttempt?: string;
   }): string {
     const optionBlock = params.chosenOption ? `
 ## Chosen Planning Concept
@@ -95,11 +96,20 @@ ${(params.chosenOption.scope || []).map((s: string) => `  * ${s}`).join('\n')}
 ${params.feedback}
 ` : '';
 
+    const previousAttemptBlock = params.previousAttempt ? `
+## [참고] 이전 생성 결과물 (수정 대상)
+아래는 당신이 직전에 생성했으나 검증에 실패한 내용입니다. 이 구조를 기반으로 오류를 분석하고 보완하십시오:
+\`\`\`json
+${params.previousAttempt}
+\`\`\`
+` : '';
+
     return `
 You are the **Specifier**. Your job is to translate the following rough idea into a structured draft specification (both the Core Spec and 2 to 4 primary feature sections) under the strict constraints of the Golden Rules.
 ${optionBlock}
 ${adjustmentsBlock}
 ${feedbackBlock}
+${previousAttemptBlock}
 
 ## Project Title
 ${params.projectName}
@@ -314,6 +324,7 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     chatHistory: NodeMessage[];
     userMessage: string;
     feedback?: string;
+    previousAttempt?: string;
   }): string {
     let roleDescription = '';
     if (params.agentType === 'specifier') {
@@ -332,24 +343,32 @@ Keep it highly actionable. If there are no gaps, respond with "No gaps found."
     const feedbackBlock = params.feedback ? `
 ## [필독] 기획 하네스 검증 실패 수정 요청
 직전에 제출한 specUpdate가 기획 가이드라인 검증을 통과하지 못했습니다.
-아래 피드백 사유를 바탕으로 오류 사항을 완벽히 수정한 specUpdate JSON 마크다운을 재작성해주십시오:
+아래 피드백 사유를 바탕으로 오류 사항을 완벽히 수정한 specUpdate 마크다운을 재작성해주십시오:
 ${params.feedback}
 ` : '';
 
+    const previousAttemptBlock = params.previousAttempt ? `
+## [참고] 이전 작성 결과물 (수정 대상)
+아래는 당신이 직전에 작성했으나 검증에 실패한 specUpdate 내용입니다. 이 내용을 바탕으로 수정하십시오:
+\`\`\`specUpdate
+${params.previousAttempt}
+\`\`\`
+` : '';
+
     return `
-${roleDescription}
+roleDescription: ${roleDescription}
 ${feedbackBlock}
+${previousAttemptBlock}
 
 Analyze the project specs and user messages. Conform to the Golden Rules.
 Respond with:
 - 1 to 2 paragraphs of clear explanation or research.
 - If you have updates to the specifications, append them inside a \`\`\`specUpdate fenced code block matching this shape:
 \`\`\`specUpdate
-{
-  "sectionId": "feature_slug_or_core_spec",
-  "title": "Optional Title Update",
-  "content": "Full revised specification content for this section"
-}
+sectionId: feature_slug_or_core_spec
+title: Optional Title Update
+===
+# Full revised specification content for this section (Markdown)
 \`\`\`
 
 ## Formatting Rules for Specification Updates:

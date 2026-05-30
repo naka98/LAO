@@ -163,40 +163,51 @@ export class AgentOrchestrator {
     if (closeIndex === -1) {
       return { prose };
     }
-    const jsonBody = rest.substring(0, closeIndex).trim();
-    
-    // Preprocess jsonBody to escape raw newlines inside JSON string values
-    let fixedJson = '';
-    let inString = false;
-    let escape = false;
-    for (let i = 0; i < jsonBody.length; i++) {
-      const char = jsonBody[i];
-      if (char === '"' && !escape) {
-        inString = !inString;
-        fixedJson += char;
-      } else if (char === '\\' && inString && !escape) {
-        escape = true;
-        fixedJson += char;
-      } else if (inString && (char === '\n' || char === '\r')) {
-        fixedJson += '\\n';
-        escape = false;
-      } else {
-        fixedJson += char;
-        escape = false;
+    const body = rest.substring(0, closeIndex).trim();
+
+    // Match divider line consisting of two or more '=' characters on a single line
+    const dividerRegex = /^\s*==+\s*$/m;
+    const match = body.match(dividerRegex);
+    if (!match || match.index === undefined) {
+      console.warn('[LAO Core] Found ```specUpdate block but could not find divider line (===)');
+      return { prose };
+    }
+
+    const headerPart = body.substring(0, match.index).trim();
+    const contentPart = body.substring(match.index + match[0].length).trim();
+
+    const lines = headerPart.split('\n');
+    let sectionId = '';
+    let title: string | undefined = undefined;
+
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx !== -1) {
+        const key = line.substring(0, colonIdx).trim().toLowerCase();
+        let val = line.substring(colonIdx + 1).trim();
+        // Strip surrounding quotes
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.substring(1, val.length - 1);
+        }
+        if (key === 'sectionid' || key === 'section_id') {
+          sectionId = val;
+        } else if (key === 'title') {
+          title = val;
+        }
       }
     }
 
-    // Clean trailing commas before closing braces/brackets
-    fixedJson = fixedJson.replace(/,\s*([}\]])/g, '$1');
-
-    try {
-      const specUpdate = JSON.parse(fixedJson);
-      if (specUpdate && specUpdate.sectionId && specUpdate.content) {
-        return { prose, specUpdate };
-      }
-    } catch (e: any) {
-      console.warn('Failed to parse specUpdate JSON even after raw newline escaping:', e);
+    if (sectionId && contentPart) {
+      return {
+        prose,
+        specUpdate: {
+          sectionId,
+          title,
+          content: contentPart
+        }
+      };
     }
+
     return { prose };
   }
 
@@ -212,6 +223,7 @@ export class AgentOrchestrator {
     const maxAttempts = 3;
     let parsed: any = null;
     let validationErrors: string[] = [];
+    let previousAttempt: string | undefined = undefined;
 
     console.log('[LAO Core] Intake Sprout started with PlanningHarness Loop.');
 
@@ -225,7 +237,8 @@ export class AgentOrchestrator {
         goldenRules: config.goldenRules,
         chosenOption,
         userAdjustments,
-        feedback: validationErrors.length > 0 ? validationErrors.join('\n') : undefined
+        feedback: validationErrors.length > 0 ? validationErrors.join('\n') : undefined,
+        previousAttempt
       });
 
       // 100% JSON 출력을 유도하기 위해 CLI 플래그 활성화 및 Direct Call
@@ -235,13 +248,23 @@ export class AgentOrchestrator {
         role: 'specifier'
       });
 
-      const cleaned = this.cleanJsonResponse(responseRaw);
-      parsed = JSON.parse(cleaned);
+      previousAttempt = responseRaw;
+
+      let cleaned = '';
+      try {
+        cleaned = this.cleanJsonResponse(responseRaw);
+        parsed = JSON.parse(cleaned);
+      } catch (e: any) {
+        console.warn(`[LAO Core] JSON parse failed on sprout attempt ${attempts}:`, e);
+        validationErrors = [`JSON parsing error: ${e.message}. Ensure your output matches a single valid JSON block.`];
+        continue;
+      }
 
       // 1단계: 기획 하네스 Linter 검증
       const validation = PlanningHarness.validateSprout(parsed);
       if (validation.isValid) {
         console.log('[LAO Core] Sprout Spec validation PASSED on attempt ' + attempts);
+        validationErrors = [];
         break; // 통과
       }
 
@@ -424,6 +447,8 @@ export class AgentOrchestrator {
 
     // 2. Context Budgeting (컨텍스트 버제팅): 에이전트별 불필요 사양서 필터링하여 토큰 및 컨텍스트 부하 방어
     let budgetedSections = params.sections;
+    const totalLen = params.sections.reduce((acc, s) => acc + s.content.length, 0);
+
     if (route === 'researcher') {
       // Researcher는 유저가 묻는 주제의 섹션 및 코어 명세만 유지
       budgetedSections = params.sections.filter(s => 
@@ -434,6 +459,27 @@ export class AgentOrchestrator {
     } else if (route === 'optionizer' || route === 'gapDetector') {
       // 리스크 감지나 의사결정은 Core Spec과 활성화된 기능 사양서만 집중 전송 (비활성 섹션 제외)
       budgetedSections = params.sections.filter(s => s.status === 'active');
+    } else if (route === 'specifier' && totalLen > 10000) {
+      // Specifier 컨텍스트 버제팅 (전체 크기가 10,000자 초과 시에만 적용)
+      const userMsgLower = params.userMessage.toLowerCase();
+      const recentHistoryText = params.chatHistory.slice(-3).map(m => m.content).join(' ').toLowerCase();
+
+      budgetedSections = params.sections.map(s => {
+        if (s.id === 'core_spec') return s;
+        
+        const isMentioned = userMsgLower.includes(s.title.toLowerCase()) ||
+                            userMsgLower.includes(s.id.toLowerCase()) ||
+                            recentHistoryText.includes(s.title.toLowerCase()) ||
+                            recentHistoryText.includes(s.id.toLowerCase());
+        if (isMentioned) {
+          return s;
+        } else {
+          return {
+            ...s,
+            content: `<!-- Content stubbed out for context budgeting. Feature is Active. -->`
+          };
+        }
+      });
     }
 
     let finalProse = '';
@@ -445,6 +491,7 @@ export class AgentOrchestrator {
       let attempts = 0;
       const maxAttempts = 3;
       let feedback = '';
+      let previousAttempt: string | undefined = undefined;
 
       while (attempts < maxAttempts) {
         if (attempts > 0) {
@@ -461,7 +508,8 @@ export class AgentOrchestrator {
           sections: budgetedSections,
           chatHistory: params.chatHistory,
           userMessage: params.userMessage,
-          feedback: feedback || undefined
+          feedback: feedback || undefined,
+          previousAttempt
         });
 
         // 텍스트 설명(Prose)을 실시간 스트리밍으로 출력하며 수집
@@ -471,12 +519,47 @@ export class AgentOrchestrator {
           onChunk: (chunk) => params.onChunk({ type: 'content', chunk })
         });
 
-        // specUpdate JSON 블록 추출
+        // extract specUpdate content block to save as previousAttempt for next iteration
+        const marker = '```specUpdate';
+        const startIdx = responseRaw.indexOf(marker);
+        if (startIdx !== -1) {
+          const rest = responseRaw.substring(startIdx + marker.length);
+          const endIdx = rest.indexOf('```');
+          if (endIdx !== -1) {
+            previousAttempt = rest.substring(0, endIdx).trim();
+          }
+        }
+
+        // specUpdate 파싱
         const { prose, specUpdate } = this.extractSpecUpdate(responseRaw);
         finalProse = prose;
         finalSpecUpdate = specUpdate;
 
+        // format parsing failure check
+        const hasSpecUpdateBlock = responseRaw.includes('```specUpdate');
+        if (hasSpecUpdateBlock && !specUpdate) {
+          validationErrors = ['The ```specUpdate block formatting is incorrect. Ensure you have sectionId, title (optional) followed by a line with ===, then the markdown content.'];
+          feedback = `[오류 피드백]\n- \`\`\`specUpdate\`\`\` 블록의 포맷이 유효하지 않습니다. 반드시 아래 형식을 정확히 준수하여 다시 써 주십시오:
+\`\`\`specUpdate
+sectionId: <section_id>
+title: <Optional Title>
+===
+<Markdown content>
+\`\`\``;
+          attempts++;
+          continue;
+        }
+
         if (specUpdate) {
+          // Safeguard: Prevent writing stubs back to specifications
+          const budgetedSection = budgetedSections.find(s => s.id === specUpdate.sectionId);
+          if (budgetedSection && budgetedSection.content.includes('Content stubbed out')) {
+            validationErrors = [`Cannot update feature "${specUpdate.sectionId}" while its content is stubbed out.`];
+            feedback = `[오류 피드백]\n- 해당 기능(${specUpdate.sectionId})은 현재 컨텍스트 최적화를 위해 내용이 생략(Stubbed out)되어 있습니다. 이 기능의 사양을 변경하고 싶다면, 사용자 메시지에 해당 기능의 이름 또는 ID를 명시적으로 언급하여 다시 작성하십시오.`;
+            attempts++;
+            continue;
+          }
+
           params.onChunk({ type: 'status', chunk: `\n*[PlanningHarness를 통한 명세 검증 Assert를 돌리고 있습니다...]*\n` });
           
           // 개별 명세 규칙 정적 Assert
