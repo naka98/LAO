@@ -45,11 +45,12 @@ export class AgentOrchestrator {
     let validationErrors: string[] = [];
     let previousAttempt: string | undefined = undefined;
 
-    console.log('[LAO Core] Intake Sprout started with PlanningHarness Loop.');
+    console.log('[LAO Core] Intake Sprout (Skeleton) started with PlanningHarness Loop.');
 
+    // 1단계: 뼈대 생성 루프
     while (attempts < maxAttempts) {
       attempts++;
-      console.log(`[LAO Core] Sprouting attempt ${attempts}/${maxAttempts}`);
+      console.log(`[LAO Core] Sprouting skeleton attempt ${attempts}/${maxAttempts}`);
       
       const prompt = PromptBuilder.buildIntakeSproutPrompt({
         projectName: config.projectName,
@@ -61,7 +62,6 @@ export class AgentOrchestrator {
         previousAttempt
       });
 
-      // 100% JSON 출력을 유도하기 위해 CLI 플래그 활성화 및 Direct Call
       const responseRaw = await this.geminiClient.generateText({
         prompt,
         jsonMode: true,
@@ -75,32 +75,30 @@ export class AgentOrchestrator {
         cleaned = cleanJsonResponse(responseRaw);
         parsed = JSON.parse(cleaned);
       } catch (e: any) {
-        console.warn(`[LAO Core] JSON parse failed on sprout attempt ${attempts}:`, e);
+        console.warn(`[LAO Core] JSON parse failed on skeleton sprout attempt ${attempts}:`, e);
         validationErrors = [`JSON parsing error: ${e.message}. Ensure your output matches a single valid JSON block.`];
         continue;
       }
 
-      // 1단계: 기획 하네스 Linter 검증
-      const validation = PlanningHarness.validateSprout(parsed);
+      // 기획 하네스 뼈대 검증
+      const validation = PlanningHarness.validateSkeleton(parsed);
       if (validation.isValid) {
-        console.log('[LAO Core] Sprout Spec validation PASSED on attempt ' + attempts);
+        console.log('[LAO Core] Sprout Skeleton validation PASSED on attempt ' + attempts);
         validationErrors = [];
         break; // 통과
       }
 
-      // 2단계: 실패 시 에러 로그 누적 및 다음 루프 피드백 준비
       validationErrors = validation.errors;
-      console.warn(`[LAO Core] Sprout Spec validation FAILED (Attempt ${attempts}):`, validationErrors);
+      console.warn(`[LAO Core] Sprout Skeleton validation FAILED (Attempt ${attempts}):`, validationErrors);
     }
 
     if (!parsed || validationErrors.length > 0) {
-      // 3회 실패 시, 멈추지 않고 UI에 에러 내역을 반환하여 유저가 중재할 수 있도록 정보를 남깁니다.
-      console.error('[LAO Core] Sprout Spec failed validation after max attempts. Proceeding with best-effort draft.');
+      console.error('[LAO Core] Sprout Skeleton failed validation after max attempts. Proceeding with best-effort draft.');
     }
 
     const now = new Date().toISOString();
 
-    // 1. Resolve coreSpec as a Markdown string
+    // Core Spec 마크다운 문자열 추출
     let coreSpecStr = '';
     if (parsed && parsed.coreSpec) {
       if (typeof parsed.coreSpec === 'object') {
@@ -114,19 +112,89 @@ export class AgentOrchestrator {
       coreSpecStr = `# Core Spec\n\nConforming to Golden Rules.\n\n## Out of Scope (Non-Goals)\n- [Default Out of Scope Item]`;
     }
 
-    // 2. Map feature array fields dynamically
-    const features: SpecSection[] = ((parsed && parsed.features) || []).map((f: any) => {
-      const title = f.title || f.name || 'Untitled Feature';
-      const content = f.content || f.description || f.requirements || '';
-      return {
-        id: f.id || randomUUID().substring(0, 8),
-        title,
-        content: typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content),
+    // 2단계: 각 Feature 순차 상세화(Elaboration) 루프
+    const rawFeatures = (parsed && parsed.features) || [];
+    const features: SpecSection[] = [];
+
+    for (const rawFeat of rawFeatures) {
+      const featId = rawFeat.id || randomUUID().substring(0, 8);
+      const featTitle = rawFeat.title || rawFeat.name || 'Untitled Feature';
+      const featDesc = rawFeat.description || '';
+      const dependencies = rawFeat.dependencies || [];
+
+      console.log(`[LAO Core] Elaborating feature details for: ${featTitle} (${featId})`);
+
+      let featAttempts = 0;
+      let featContent = '';
+      let featErrors: string[] = [];
+      let featPrevAttempt: string | undefined = undefined;
+
+      while (featAttempts < maxAttempts) {
+        featAttempts++;
+        console.log(`  -> Feature elaboration attempt ${featAttempts}/${maxAttempts}`);
+
+        const elaborationPrompt = PromptBuilder.buildFeatureElaborationPrompt({
+          projectName: config.projectName,
+          coreSpec: coreSpecStr,
+          feature: {
+            id: featId,
+            title: featTitle,
+            description: featDesc,
+            dependencies
+          },
+          goldenRules: config.goldenRules,
+          feedback: featErrors.length > 0 ? featErrors.join('\n') : undefined,
+          previousAttempt: featPrevAttempt
+        });
+
+        const featResponseRaw = await this.geminiClient.generateText({
+          prompt: elaborationPrompt,
+          jsonMode: true,
+          role: 'specifier'
+        });
+
+        featPrevAttempt = featResponseRaw;
+
+        try {
+          const cleanedFeat = cleanJsonResponse(featResponseRaw);
+          const parsedFeat = JSON.parse(cleanedFeat);
+          featContent = parsedFeat.content || '';
+        } catch (e: any) {
+          console.warn(`  -> JSON parse failed on feature ${featId} attempt ${featAttempts}:`, e);
+          featErrors = [`JSON parsing error: ${e.message}. Ensure your output matches a single valid JSON block.`];
+          continue;
+        }
+
+        // 개별 기능 마크다운 상세 검증 (GWT, User Story 필수 등)
+        const valFeat = PlanningHarness.validateFeatureContent(featContent);
+        if (valFeat.isValid) {
+          console.log(`  -> Feature ${featId} validation PASSED on attempt ${featAttempts}`);
+          featErrors = [];
+          break;
+        }
+
+        featErrors = valFeat.errors;
+        console.warn(`  -> Feature ${featId} validation FAILED (Attempt ${featAttempts}):`, featErrors);
+      }
+
+      if (featErrors.length > 0) {
+        console.error(`  -> Feature ${featId} failed validation after max attempts. Proceeding with best-effort content.`);
+      }
+
+      // 만약 생성이 완전히 비어있거나 실패한 경우 기본값
+      if (!featContent) {
+        featContent = `# ${featTitle}\n\n## User Story\nAs a user, I want to experience ${featTitle}, so that I get value.\n\n## Acceptance Criteria\nScenario: Accessing ${featTitle}\nGiven the application runs\nWhen I view ${featTitle}\nThen I should see the interface.`;
+      }
+
+      features.push({
+        id: featId,
+        title: featTitle,
+        content: featContent,
         status: 'active',
         createdAt: now,
         updatedAt: now
-      };
-    });
+      });
+    }
 
     return {
       coreSpec: coreSpecStr,

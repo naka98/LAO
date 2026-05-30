@@ -18,6 +18,53 @@ export interface DiagnosticsResult {
 
 export class PlanningHarness {
   /**
+   * 뼈대(Skeleton) 무결성을 검증합니다.
+   */
+  public static validateSkeleton(parsed: any): ValidationResult {
+    const errors: string[] = [];
+
+    if (!parsed) {
+      return { isValid: false, errors: ['기획안 데이터가 비어 있거나 JSON 파싱에 실패했습니다.'] };
+    }
+
+    if (!parsed.coreSpec) {
+      errors.push('[Core Spec 오류] coreSpec 데이터가 누락되었습니다.');
+    }
+
+    if (parsed.features && Array.isArray(parsed.features)) {
+      if (parsed.features.length === 0) {
+        errors.push('[Features 오류] 하나 이상의 Feature Spec 섹션이 필요합니다.');
+      }
+      parsed.features.forEach((feat: any, idx: number) => {
+        const featTitle = feat.title || feat.name || `Feature #${idx + 1}`;
+        if (!feat.id) {
+          errors.push(`[Feature: ${featTitle} 오류] id 필드가 누락되었습니다.`);
+        }
+        if (!feat.title && !feat.name) {
+          errors.push(`[Feature #${idx + 1} 오류] title 또는 name 필드가 누락되었습니다.`);
+        }
+        if (!feat.description && !feat.content) {
+          errors.push(`[Feature: ${featTitle} 오류] description 또는 content 필드가 누락되었습니다.`);
+        }
+      });
+    } else {
+      errors.push('[Features 오류] features 배열 필드가 누락되었습니다.');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }
+
+  /**
+   * 개별 기능 기획 본문의 세부 마크다운 형식을 정밀 검증합니다.
+   */
+  public static validateFeatureContent(content: string): ValidationResult {
+    return this.validateFeatureSpecContent(content);
+  }
+
+  /**
    * 전체 발아(Sprout) 스펙 결과물을 일관되게 검증합니다. (Core + Features)
    */
   public static validateSprout(parsed: any): ValidationResult {

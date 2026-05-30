@@ -79,9 +79,6 @@ Option ${params.chosenOption.key}: ${params.chosenOption.title}
 - Core User: ${params.chosenOption.coreUser}
 - Scope to Build:
 ${(params.chosenOption.scope || []).map((s: string) => `  * ${s}`).join('\n')}
-- Pros: ${(params.chosenOption.pros || []).join(', ')}
-- Cons: ${(params.chosenOption.cons || []).join(', ')}
-- Recommended Scenario: ${params.chosenOption.recommendedScenario}
 ` : '';
 
     const adjustmentsBlock = params.userAdjustments ? `
@@ -91,7 +88,7 @@ ${(params.chosenOption.scope || []).map((s: string) => `  * ${s}`).join('\n')}
 
     const feedbackBlock = params.feedback ? `
 ## [필독] 이전 생성에서의 검증 검토 피드백
-당신이 이전에 생성한 사양서 구조에 다음과 같은 검증 실패 및 누락 오류가 발생했습니다.
+당신이 이전에 생성한 뼈대 구조에 다음과 같은 검증 실패 및 누락 오류가 발생했습니다.
 이번 생성 시에는 이 피드백 오류 사항을 반드시 반영하여 완벽하게 규격을 충족시키십시오:
 ${params.feedback}
 ` : '';
@@ -105,7 +102,8 @@ ${params.previousAttempt}
 ` : '';
 
     return `
-You are the **Specifier**. Your job is to translate the following rough idea into a structured draft specification (both the Core Spec and 2 to 4 primary feature sections) under the strict constraints of the Golden Rules.
+You are the **Specifier**. Your job is to translate the following rough idea into a structured draft skeleton specification (both the Core Spec Outline and 2 to 4 primary feature outlines) under the strict constraints of the Golden Rules.
+
 ${optionBlock}
 ${adjustmentsBlock}
 ${feedbackBlock}
@@ -121,16 +119,11 @@ ${this.buildConsolidatedRules(params.goldenRules)}
 
 ## Required Sections & Formatting Rules:
 1. **Core Spec (\`coreSpec\`)\**:
-   - MUST contain a \`## Out of Scope (Non-Goals)\` section at the end of the markdown content outlining what features, integrations, or capabilities the MVP will NOT build.
-2. **Feature Content (\`content\` of features)**:
-   - For every feature, the content markdown MUST be structured with:
-     - A \`## User Story\` section formatted as:
-       \`As a [role], I want to [action], so that [benefit].\`
-     - A \`## Acceptance Criteria\` section outlining the scenarios using the Given/When/Then layout, formatted as:
-       \`Scenario: [Scenario description]\`
-       \`Given [context/preconditions]\`
-       \`When [action/trigger]\`
-       \`Then [expected outcome/behavior]\`
+   - Outlines the base architecture, tech stack, and global requirements conforming to the Golden Rules.
+   - MUST contain a \`## Out of Scope (Non-Goals)\` section at the end of the markdown content.
+2. **Feature Outline (\`features\` array)**:
+   - For every feature, output a simple skeleton object containing \`id\` (unique slug), \`title\` (name), \`description\` (a single sentence summarizing the feature purpose), and \`dependencies\` (an array of feature IDs this feature depends on).
+   - DO NOT write the detailed markdown content (User Story, Acceptance Criteria) yet. Keep it as a clean outline.
 
 ## Output Format
 You must output a single, valid JSON block inside a fenced code block of type \`\`\`json.
@@ -141,12 +134,13 @@ The JSON must match the following TypeScript shape:
     {
       "id": "feature_slug_1",
       "title": "Feature Title 1",
-      "content": "# Feature Requirement Details\\n\\n## User Story\\nAs a [user], I want to [action], so that [benefit].\\n\\n## Acceptance Criteria\\nScenario: [Scenario Title]\\nGiven [precondition]\\nWhen [action]\\nThen [result]"
+      "description": "A single sentence summarizing the feature purpose.",
+      "dependencies": []
     }
   ]
 }
 
-No other prose or text outside the json block. Keep markdown content well-structured and detailed.
+No other prose or text outside the json block. Keep the skeleton clean and lightweight.
 `;
   }
 
@@ -420,6 +414,210 @@ ${params.specsBlock}
    - Do NOT use \`- [x]\` or others.
 3. Be specific. Name files, API paths, and component names (e.g. \`- [ ] Create user authentication API endpoint in /api/auth/login\` instead of just \`- [ ] Make login\`).
 4. Output ONLY the markdown checklist. Do not include introductory text, conversational greetings, explanations, or code blocks. Just output the checklist lines directly.
+`;
+  }
+
+  /**
+   * Prompts the Specifier to elaborate a single feature skeleton into full details (User Story + GWT Acceptance Criteria)
+   */
+  public static buildFeatureElaborationPrompt(params: {
+    projectName: string;
+    coreSpec: string;
+    feature: { id: string; title: string; description: string; dependencies?: string[] };
+    goldenRules: GoldenRules;
+    feedback?: string;
+    previousAttempt?: string;
+  }): string {
+    const feedbackBlock = params.feedback ? `
+## [필독] 이전 생성에서의 검증 검토 피드백
+당신이 이전에 생성한 기능 사양서에 다음과 같은 검증 실패 오류가 발생했습니다.
+이번 생성 시에는 이 피드백 오류 사항을 반드시 반영하여 완벽하게 규격을 충족시키십시오:
+${params.feedback}
+` : '';
+
+    const previousAttemptBlock = params.previousAttempt ? `
+## [참고] 이전 생성 결과물 (수정 대상)
+아래는 당신이 직전에 생성했으나 검증에 실패한 내용입니다. 이 구조를 기반으로 오류를 분석하고 보완하십시오:
+\`\`\`json
+${params.previousAttempt}
+\`\`\`
+` : '';
+
+    return `
+You are the **Specifier**. Your job is to elaborate the following feature outline into a detailed, complete software specification under the strict constraints of the Golden Rules.
+
+${feedbackBlock}
+${previousAttemptBlock}
+
+## Project Title
+${params.projectName}
+
+## Core Specification Context
+${params.coreSpec}
+
+${this.buildConsolidatedRules(params.goldenRules)}
+
+## Target Feature Outline to Elaborate:
+- **ID**: ${params.feature.id}
+- **Title**: ${params.feature.title}
+- **Description**: ${params.feature.description}
+${params.feature.dependencies ? `- **Dependencies**: ${params.feature.dependencies.join(', ')}` : ''}
+
+## Required Sections & Formatting Rules:
+The content of this feature MUST be a Markdown string structured with:
+1. \`## User Story\` section formatted as:
+   \`As a [role], I want to [action], so that [benefit].\`
+2. \`## Acceptance Criteria\` section outlining the scenarios using the Given/When/Then layout, formatted as:
+   \`Scenario: [Scenario description]\`
+   \`Given [context/preconditions]\`
+   \`When [action/trigger]\`
+   \`Then [expected outcome/behavior]\`
+3. Any additional specifications, such as API requirements or UI layout guidelines, related to this feature.
+
+## Output Format
+You must output a single, valid JSON block inside a fenced code block of type \`\`\`json.
+The JSON must match the following TypeScript shape:
+{
+  "content": "# ${params.feature.title}\\n\\n## User Story\\nAs a [role], I want to [action], so that [benefit].\\n\\n## Acceptance Criteria\\nScenario: [Scenario Title]\\nGiven [precondition]\\nWhen [action]\\nThen [result]"
+}
+
+No other prose or text outside the json block.
+`;
+  }
+
+  /**
+   * Prompts the Schema Agent to generate/update Database Schema section
+   */
+  public static buildSchemaAgentPrompt(params: {
+    config: ProjectConfig;
+    section: SpecSection;
+    userMessage: string;
+    chatHistory: NodeMessage[];
+  }): string {
+    const historyBlock = this.chatHistorySection(params.chatHistory);
+    return `
+You are the **Schema Agent**, a specialist in database modeling and schemas. 
+Your task is to analyze the user request and update the Database Schema section of the feature specification.
+
+## Active Feature
+### ${params.section.title} (ID: ${params.section.id})
+${params.section.content}
+
+${this.buildConsolidatedRules(params.config)}
+
+## User Request
+${params.userMessage}
+
+${historyBlock}
+
+## Instructions:
+1. Identify database requirements from the user request.
+   - For SQLite, specify tables, columns, primary/foreign keys, types, and indexes.
+   - Do NOT specify other DB types if Golden Rules restrict it.
+2. Output ONLY the updated \`## Database Schema\` section in markdown. Do not include other sections or prose.
+`;
+  }
+
+  /**
+   * Prompts the UI Spec Agent to generate/update UI design and interaction flow section
+   */
+  public static buildUISpecAgentPrompt(params: {
+    config: ProjectConfig;
+    section: SpecSection;
+    userMessage: string;
+    chatHistory: NodeMessage[];
+  }): string {
+    const historyBlock = this.chatHistorySection(params.chatHistory);
+    return `
+You are the **UI Spec Agent**, a specialist in user interface and interaction design.
+Your task is to analyze the user request and update the UI design or interaction flow section of the feature specification.
+
+## Active Feature
+### ${params.section.title} (ID: ${params.section.id})
+${params.section.content}
+
+${this.buildConsolidatedRules(params.config)}
+
+## User Request
+${params.userMessage}
+
+${historyBlock}
+
+## Instructions:
+1. Detail the layout, view components, transitions, states (normal, loading, empty, error) required.
+2. Output ONLY the updated UI/Interaction sections in markdown. Do not include other sections or prose.
+`;
+  }
+
+  /**
+   * Prompts the Test Scenario Agent to generate/update Acceptance Criteria section
+   */
+  public static buildTestScenarioAgentPrompt(params: {
+    config: ProjectConfig;
+    section: SpecSection;
+    userMessage: string;
+    chatHistory: NodeMessage[];
+  }): string {
+    const historyBlock = this.chatHistorySection(params.chatHistory);
+    return `
+You are the **Test Scenario Agent**, a specialist in software quality assurance and test design.
+Your task is to analyze the user request and update the Acceptance Criteria of the feature specification.
+
+## Active Feature
+### ${params.section.title} (ID: ${params.section.id})
+${params.section.content}
+
+${this.buildConsolidatedRules(params.config)}
+
+## User Request
+${params.userMessage}
+
+${historyBlock}
+
+## Instructions:
+1. Define clear, testable requirements using the Given-When-Then layout.
+2. Ensure you have \`## Acceptance Criteria\` and write scenarios formatted as:
+   \`Scenario: [Title]\`
+   \`Given [context]\`
+   \`When [trigger]\`
+   \`Then [outcome]\`
+3. Output ONLY the updated \`## Acceptance Criteria\` section (and optionally \`## User Story\` if user story changed) in markdown. Do not include other sections or prose.
+`;
+  }
+
+  /**
+   * Prompts the Spec Coordinator to plan which subagents to invoke
+   */
+  public static buildCoordinatorPlanPrompt(params: {
+    config: ProjectConfig;
+    sections: SpecSection[];
+    chatHistory: NodeMessage[];
+    userMessage: string;
+  }): string {
+    const specsBlock = params.sections.map(s => `- **ID**: ${s.id}, **Title**: ${s.title}`).join('\n');
+    return `
+You are the **Spec Coordinator**. Your job is to analyze the user request and determine:
+1. Which section of the specification is the user targeting for modification (e.g. core_spec or a specific feature slug).
+2. Which aspects need update:
+   - \`schema\`: Database schemas, tables, fields, or relations.
+   - \`ui\`: User interface layout, views, screens, interaction flows.
+   - \`test\`: Acceptance criteria, test scenarios, User Stories (Given-When-Then criteria).
+
+## Active Specification Sections
+${specsBlock}
+
+## User Request
+${params.userMessage}
+
+Respond with ONLY valid JSON matching this shape:
+{
+  "targetSectionId": "core_spec|feature_slug",
+  "runSchema": true|false,
+  "runUI": true|false,
+  "runTest": true|false,
+  "proseExplanation": "A short sentence explaining what needs to be updated and why."
+}
+No commentary, no markdown fences.
 `;
   }
 
