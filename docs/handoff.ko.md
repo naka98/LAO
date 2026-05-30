@@ -18,7 +18,8 @@ LAO 0.9 버전에서는 기존 Swift 기반의 MCP 서버(`LAOMCPServer`) 및 ma
    * **Monospace 로그 뷰어**: 실시간 컴파일된 마크다운을 텍스트 뷰로 확인.
    * **Copy**: 전체 명세서 내용을 클립보드에 원클릭 복사.
    * **Download**: 로컬 환경에 `spec_compiled.md` 파일로 다운로드.
-3. **AI 접수** — 복사된 텍스트나 다운로드한 명세서 파일을 에이전트(Claude Code, Codex 등)에게 제공하여 즉각적인 구현을 지시합니다.
+3. **AI 접수** — 개발자는 컴파일된 `spec_compiled.md` 파일이나 내용을 CLI 에이전트에 주입합니다. LAO v0.9.3은 환경 진단 기능(`runDiagnostics`)을 포함하여, 기동 전 로컬 CLI 경로 및 자격 증명(API Key) 상태가 완전한지 선제적으로 진단합니다.
+
 
 ---
 

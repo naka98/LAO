@@ -1,7 +1,16 @@
-import { ProjectConfig, SpecSection, DecisionCard, NodeMessage, IntakeProposals, IntakeOption } from '../models';
+import { ProjectConfig, SpecSection, DecisionCard, NodeMessage, IntakeOption, IntakeProposals } from '../models';
 import { GeminiClient } from '../gemini';
 import { PromptBuilder } from './promptBuilder';
 import { randomUUID } from 'crypto';
+import { PlanningHarness } from './harness';
+import { createInitialState } from './graph/state';
+import { directorNode } from './graph/nodes/director';
+import { specifierNode } from './graph/nodes/specifier';
+import { researcherNode } from './graph/nodes/researcher';
+import { optionizerNode } from './graph/nodes/optionizer';
+import { gapDetectorNode } from './graph/nodes/gapDetector';
+import { validatorNode } from './graph/nodes/validator';
+import { cleanJsonResponse, extractSpecUpdate } from './graph/utils';
 
 export interface RouteAndRespondResult {
   route: 'specifier' | 'researcher' | 'optionizer' | 'gapDetector';
@@ -12,6 +21,7 @@ export interface RouteAndRespondResult {
     title?: string;
     content: string;
   };
+  validationErrors?: string[]; // 최종 검증 실패 시 에러 로그 리포트용
 }
 
 export class AgentOrchestrator {
@@ -22,131 +32,75 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Helper to clean markdown JSON fences before parsing
-   */
-  private cleanJsonResponse(raw: string): string {
-    let cleaned = raw.trim();
-    
-    // 1. Strip outermost ```json and matching trailing ```
-    const jsonMarker = '```json';
-    const jsonIndex = cleaned.indexOf(jsonMarker);
-    if (jsonIndex !== -1) {
-      cleaned = cleaned.substring(jsonIndex + jsonMarker.length).trim();
-      const lastFence = cleaned.lastIndexOf('```');
-      if (lastFence !== -1) {
-        cleaned = cleaned.substring(0, lastFence).trim();
-      }
-    } else {
-      // 2. Strip generic ``` blocks
-      const genericMarker = '```';
-      const genericIndex = cleaned.indexOf(genericMarker);
-      if (genericIndex !== -1) {
-        cleaned = cleaned.substring(genericIndex + genericMarker.length).trim();
-        const lastFence = cleaned.lastIndexOf('```');
-        if (lastFence !== -1) {
-          cleaned = cleaned.substring(0, lastFence).trim();
-        }
-      }
-    }
-    
-    // 3. Fallback to extracting everything within the first and last brace/bracket
-    const firstBrace = cleaned.indexOf('{');
-    const firstBracket = cleaned.indexOf('[');
-    if (firstBrace !== -1 || firstBracket !== -1) {
-      const start = firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket) ? firstBrace : firstBracket;
-      const lastBrace = cleaned.lastIndexOf('}');
-      const lastBracket = cleaned.lastIndexOf(']');
-      const end = lastBrace > lastBracket ? lastBrace + 1 : lastBracket + 1;
-      if (end > start) {
-        return cleaned.substring(start, end).trim();
-      }
-    }
-
-    return cleaned;
-  }
-
-  /**
-   * Helper to extract optional spec update blocks from prose responses
-   */
-  private extractSpecUpdate(response: string): { prose: string; specUpdate?: { sectionId: string; title?: string; content: string } } {
-    const marker = '```specUpdate';
-    const index = response.indexOf(marker);
-    if (index === -1) {
-      return { prose: response.trim() };
-    }
-    const prose = response.substring(0, index).trim();
-    const rest = response.substring(index + marker.length);
-    const closeIndex = rest.indexOf('```');
-    if (closeIndex === -1) {
-      return { prose };
-    }
-    const jsonBody = rest.substring(0, closeIndex).trim();
-    
-    // Preprocess jsonBody to escape raw newlines inside JSON string values
-    let fixedJson = '';
-    let inString = false;
-    let escape = false;
-    for (let i = 0; i < jsonBody.length; i++) {
-      const char = jsonBody[i];
-      if (char === '"' && !escape) {
-        inString = !inString;
-        fixedJson += char;
-      } else if (char === '\\' && inString && !escape) {
-        escape = true;
-        fixedJson += char;
-      } else if (inString && (char === '\n' || char === '\r')) {
-        fixedJson += '\\n';
-        escape = false;
-      } else {
-        fixedJson += char;
-        escape = false;
-      }
-    }
-
-    // Clean trailing commas before closing braces/brackets
-    fixedJson = fixedJson.replace(/,\s*([}\]])/g, '$1');
-
-    try {
-      const specUpdate = JSON.parse(fixedJson);
-      if (specUpdate && specUpdate.sectionId && specUpdate.content) {
-        return { prose, specUpdate };
-      }
-    } catch (e: any) {
-      console.warn('Failed to parse specUpdate JSON even after raw newline escaping:', e);
-    }
-    return { prose };
-  }
-
-  /**
-   * Sprout draft specifications based on project config, chosen option, and user adjustments
+   * 기획안 초안 발아(Sprout) 시, 기획 하네스 자가 교정 루프를 거쳐 안전한 명세를 생성합니다.
    */
   public async runIntakeSprout(
     config: ProjectConfig,
     chosenOption?: IntakeOption,
     userAdjustments?: string
   ): Promise<{ coreSpec: string; features: SpecSection[] }> {
-    const prompt = PromptBuilder.buildIntakeSproutPrompt({
-      projectName: config.projectName,
-      projectDesc: config.projectDesc,
-      goldenRules: config.goldenRules,
-      chosenOption,
-      userAdjustments
-    });
+    let attempts = 0;
+    const maxAttempts = 3;
+    let parsed: any = null;
+    let validationErrors: string[] = [];
+    let previousAttempt: string | undefined = undefined;
 
-    const responseRaw = await this.geminiClient.generateText({
-      prompt,
-      jsonMode: true,
-      role: 'specifier'
-    });
+    console.log('[LAO Core] Intake Sprout (Skeleton) started with PlanningHarness Loop.');
 
-    const cleaned = this.cleanJsonResponse(responseRaw);
-    const parsed = JSON.parse(cleaned);
+    // 1단계: 뼈대 생성 루프
+    while (attempts < maxAttempts) {
+      attempts++;
+      console.log(`[LAO Core] Sprouting skeleton attempt ${attempts}/${maxAttempts}`);
+      
+      const prompt = PromptBuilder.buildIntakeSproutPrompt({
+        projectName: config.projectName,
+        projectDesc: config.projectDesc,
+        goldenRules: config.goldenRules,
+        chosenOption,
+        userAdjustments,
+        feedback: validationErrors.length > 0 ? validationErrors.join('\n') : undefined,
+        previousAttempt
+      });
+
+      const responseRaw = await this.geminiClient.generateText({
+        prompt,
+        jsonMode: true,
+        role: 'specifier'
+      });
+
+      previousAttempt = responseRaw;
+
+      let cleaned = '';
+      try {
+        cleaned = cleanJsonResponse(responseRaw);
+        parsed = JSON.parse(cleaned);
+      } catch (e: any) {
+        console.warn(`[LAO Core] JSON parse failed on skeleton sprout attempt ${attempts}:`, e);
+        validationErrors = [`JSON parsing error: ${e.message}. Ensure your output matches a single valid JSON block.`];
+        continue;
+      }
+
+      // 기획 하네스 뼈대 검증
+      const validation = PlanningHarness.validateSkeleton(parsed);
+      if (validation.isValid) {
+        console.log('[LAO Core] Sprout Skeleton validation PASSED on attempt ' + attempts);
+        validationErrors = [];
+        break; // 통과
+      }
+
+      validationErrors = validation.errors;
+      console.warn(`[LAO Core] Sprout Skeleton validation FAILED (Attempt ${attempts}):`, validationErrors);
+    }
+
+    if (!parsed || validationErrors.length > 0) {
+      console.error('[LAO Core] Sprout Skeleton failed validation after max attempts. Proceeding with best-effort draft.');
+    }
 
     const now = new Date().toISOString();
 
-    // 1. Resolve coreSpec as a Markdown string
+    // Core Spec 마크다운 문자열 추출
     let coreSpecStr = '';
-    if (parsed.coreSpec) {
+    if (parsed && parsed.coreSpec) {
       if (typeof parsed.coreSpec === 'object') {
         coreSpecStr = Object.entries(parsed.coreSpec)
           .map(([key, val]) => `## ${key}\n\n${val}`)
@@ -155,22 +109,92 @@ export class AgentOrchestrator {
         coreSpecStr = String(parsed.coreSpec);
       }
     } else {
-      coreSpecStr = `# Core Spec\n\nConforming to Golden Rules.`;
+      coreSpecStr = `# Core Spec\n\nConforming to Golden Rules.\n\n## Out of Scope (Non-Goals)\n- [Default Out of Scope Item]`;
     }
 
-    // 2. Map feature array fields dynamically
-    const features: SpecSection[] = (parsed.features || []).map((f: any) => {
-      const title = f.title || f.name || 'Untitled Feature';
-      const content = f.content || f.description || f.requirements || '';
-      return {
-        id: f.id || randomUUID().substring(0, 8),
-        title,
-        content: typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content),
+    // 2단계: 각 Feature 순차 상세화(Elaboration) 루프
+    const rawFeatures = (parsed && parsed.features) || [];
+    const features: SpecSection[] = [];
+
+    for (const rawFeat of rawFeatures) {
+      const featId = rawFeat.id || randomUUID().substring(0, 8);
+      const featTitle = rawFeat.title || rawFeat.name || 'Untitled Feature';
+      const featDesc = rawFeat.description || '';
+      const dependencies = rawFeat.dependencies || [];
+
+      console.log(`[LAO Core] Elaborating feature details for: ${featTitle} (${featId})`);
+
+      let featAttempts = 0;
+      let featContent = '';
+      let featErrors: string[] = [];
+      let featPrevAttempt: string | undefined = undefined;
+
+      while (featAttempts < maxAttempts) {
+        featAttempts++;
+        console.log(`  -> Feature elaboration attempt ${featAttempts}/${maxAttempts}`);
+
+        const elaborationPrompt = PromptBuilder.buildFeatureElaborationPrompt({
+          projectName: config.projectName,
+          coreSpec: coreSpecStr,
+          feature: {
+            id: featId,
+            title: featTitle,
+            description: featDesc,
+            dependencies
+          },
+          goldenRules: config.goldenRules,
+          feedback: featErrors.length > 0 ? featErrors.join('\n') : undefined,
+          previousAttempt: featPrevAttempt
+        });
+
+        const featResponseRaw = await this.geminiClient.generateText({
+          prompt: elaborationPrompt,
+          jsonMode: true,
+          role: 'specifier'
+        });
+
+        featPrevAttempt = featResponseRaw;
+
+        try {
+          const cleanedFeat = cleanJsonResponse(featResponseRaw);
+          const parsedFeat = JSON.parse(cleanedFeat);
+          featContent = parsedFeat.content || '';
+        } catch (e: any) {
+          console.warn(`  -> JSON parse failed on feature ${featId} attempt ${featAttempts}:`, e);
+          featErrors = [`JSON parsing error: ${e.message}. Ensure your output matches a single valid JSON block.`];
+          continue;
+        }
+
+        // 개별 기능 마크다운 상세 검증 (GWT, User Story 필수 등)
+        const valFeat = PlanningHarness.validateFeatureContent(featContent);
+        if (valFeat.isValid) {
+          console.log(`  -> Feature ${featId} validation PASSED on attempt ${featAttempts}`);
+          featErrors = [];
+          break;
+        }
+
+        featErrors = valFeat.errors;
+        console.warn(`  -> Feature ${featId} validation FAILED (Attempt ${featAttempts}):`, featErrors);
+      }
+
+      if (featErrors.length > 0) {
+        console.error(`  -> Feature ${featId} failed validation after max attempts. Proceeding with best-effort content.`);
+      }
+
+      // 만약 생성이 완전히 비어있거나 실패한 경우 기본값
+      if (!featContent) {
+        featContent = `# ${featTitle}\n\n## User Story\nAs a user, I want to experience ${featTitle}, so that I get value.\n\n## Acceptance Criteria\nScenario: Accessing ${featTitle}\nGiven the application runs\nWhen I view ${featTitle}\nThen I should see the interface.`;
+      }
+
+      features.push({
+        id: featId,
+        title: featTitle,
+        content: featContent,
         status: 'active',
         createdAt: now,
         updatedAt: now
-      };
-    });
+      });
+    }
 
     return {
       coreSpec: coreSpecStr,
@@ -195,7 +219,7 @@ export class AgentOrchestrator {
       role: 'director'
     });
 
-    const cleaned = this.cleanJsonResponse(responseRaw);
+    const cleaned = cleanJsonResponse(responseRaw);
     return JSON.parse(cleaned) as IntakeProposals;
   }
 
@@ -210,7 +234,7 @@ export class AgentOrchestrator {
       role: 'optionizer'
     });
 
-    const cleaned = this.cleanJsonResponse(responseRaw);
+    const cleaned = cleanJsonResponse(responseRaw);
     const parsed = JSON.parse(cleaned);
 
     const now = new Date().toISOString();
@@ -243,72 +267,73 @@ export class AgentOrchestrator {
   }
 
   /**
-   * Main routing and streaming chat responder for the workspace
+   * 실시간 에이전트 간 토론 및 기획 하네스 자가 보정 루프가 탑재된 메인 라우터Responder입니다.
+   * State-Graph Agent Architecture 루프로 전면 교체되었습니다.
    */
   public async routeAndRespondStream(params: {
     config: ProjectConfig;
     sections: SpecSection[];
     chatHistory: NodeMessage[];
     userMessage: string;
-    onChunk: (data: { type: 'routing' | 'content'; route?: string; reasoning?: string; chunk?: string }) => void;
+    onChunk: (data: { type: 'routing' | 'content' | 'status'; route?: string; reasoning?: string; chunk?: string }) => void;
+    abortSignal?: AbortSignal;
+    requestUuid?: string;
   }): Promise<RouteAndRespondResult> {
     
-    // 1. Route message using Director
-    const directorPrompt = PromptBuilder.buildDirectorRoutingPrompt({
-      config: params.config,
-      chatHistory: params.chatHistory,
-      userMessage: params.userMessage
-    });
-
-    let route: 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' = 'specifier';
-    let routingReason = 'Vague intent fallback';
-
-    try {
-      const directorResponseRaw = await this.geminiClient.generateText({
-        prompt: directorPrompt,
-        jsonMode: true,
-        role: 'director'
-      });
-
-      const cleanedDirector = this.cleanJsonResponse(directorResponseRaw);
-      const parsedRouting = JSON.parse(cleanedDirector);
-      if (
-        parsedRouting.route &&
-        ['specifier', 'researcher', 'optionizer', 'gapDetector'].includes(parsedRouting.route)
-      ) {
-        route = parsedRouting.route;
-        routingReason = parsedRouting.reasoning || '';
-      }
-    } catch (e) {
-      console.warn('[LAO Director] Routing failed, defaulting to specifier', e);
-    }
-
-    // Notify client of selected agent route
-    params.onChunk({ type: 'routing', route, reasoning: routingReason });
-
-    // 2. Generate agent response stream
-    const agentPrompt = PromptBuilder.buildAgentChatPrompt({
-      agentType: route,
+    // 1. 초기 전역 상태 생성
+    let state = createInitialState({
       config: params.config,
       sections: params.sections,
-      chatHistory: params.chatHistory,
-      userMessage: params.userMessage
+      decisions: [],
+      messages: params.chatHistory,
+      userMessage: params.userMessage,
+      requestUuid: params.requestUuid,
+      abortSignal: params.abortSignal
     });
 
-    const responseRaw = await this.geminiClient.generateText({
-      prompt: agentPrompt,
-      role: route,
-      onChunk: (chunk) => params.onChunk({ type: 'content', chunk })
-    });
+    // 2. 그래프 상태 전이 실행 루프
+    while (!state.isDone) {
+      if (params.abortSignal?.aborted) {
+        state.isDone = true;
+        state.currentRoute = 'end';
+        break;
+      }
 
-    // 3. Extract spec updates from response
-    const { prose, specUpdate } = this.extractSpecUpdate(responseRaw);
+      switch (state.currentRoute) {
+        case 'director':
+          state = await directorNode(state, this.geminiClient, params.onChunk);
+          break;
+        case 'specifier':
+          state = await specifierNode(state, this.geminiClient, params.onChunk);
+          break;
+        case 'researcher':
+          state = await researcherNode(state, this.geminiClient, params.onChunk);
+          break;
+        case 'optionizer':
+          state = await optionizerNode(state, this.geminiClient, params.onChunk);
+          break;
+        case 'gapDetector':
+          state = await gapDetectorNode(state, this.geminiClient, params.onChunk);
+          break;
+        case 'validator':
+          state = await validatorNode(state, params.onChunk);
+          break;
+        case 'end':
+        default:
+          state.isDone = true;
+          break;
+      }
+    }
+
+    // 3. 최종 라우트 정보 정규화 (author 스키마 컴파일 충돌 방지용)
+    const finalRoute = state.selectedAgent || 'specifier';
 
     return {
-      route,
-      reasoning: routingReason,
-      prose,
-      specUpdate
+      route: finalRoute,
+      reasoning: state.routingReason,
+      prose: state.tempProse,
+      specUpdate: state.tempSpecUpdate,
+      validationErrors: state.validationErrors
     };
   }
 

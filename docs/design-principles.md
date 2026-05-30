@@ -115,6 +115,12 @@ Goal of this stage: produce a detailed design document the developer can **imple
 | Leave implementation notes | Include architectural patterns, performance considerations, security checkpoints — guidance needed for implementation but not visible in the spec |
 | Name assumptions explicitly | When filling information absent from the context, mark it as "Assumption: ~" so the client can validate |
 
+> **Programmatic Verification Note (v0.9.3)**:
+> In addition to human reviews, these elaboration principles are now programmatically enforced. 
+> The `PlanningHarness` automatically asserts that all feature specs contain structured User Stories, Out of Scope bounds, and Given-When-Then Acceptance Criteria. 
+> Spec updates undergo a 3-attempt self-correction loop to satisfy these rules before saving.
+
+
 ### 3.4 Handoff (Markdown Handoff)
 
 > Implementation details (export artifacts, compiled specs) — see [handoff.md](handoff.md). This section covers principles only.

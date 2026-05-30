@@ -215,4 +215,5 @@ Role separation
 
 Output pipeline
 
-Screen plan → Common reference document → Development design draft → Delivered to development AI via Compiled Markdown
+Screen plan → Common reference document → Development design draft → Programmatic verification (Planning Harness) → Handoff to development AI
+

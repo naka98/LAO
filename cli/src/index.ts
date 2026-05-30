@@ -11,6 +11,7 @@ import { activeProcesses, getShellInfo, GeminiClient } from './gemini';
 import { randomUUID } from 'crypto';
 import { NodeMessage } from './models';
 import { MockupGenerator } from './agents/mockupGenerator';
+import { PlanningHarness } from './agents/harness';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -18,6 +19,9 @@ const PROJECT_ROOT = process.cwd();
 
 const storage = new StorageManager(PROJECT_ROOT);
 const orchestrator = new AgentOrchestrator();
+
+// 글로벌 Mockup 스로틀 타이머
+let mockupTimeout: NodeJS.Timeout | null = null;
 
 // Middleware
 app.use(cors());
@@ -296,21 +300,29 @@ app.post('/api/project/intake/select', async (req, res) => {
     // 1. Sprout spec sections using AI, conforming to chosen option and custom adjustments
     const sprouted = await orchestrator.runIntakeSprout(config, chosenOption, userAdjustments);
 
-    // Save core spec
+    // Save core spec as draft
     const now = new Date().toISOString();
-    storage.writeSpecSection({
+    const coreSpecSection = {
       id: 'core_spec',
       title: 'Core Architecture Spec',
       content: sprouted.coreSpec,
-      status: 'active',
+      status: 'active' as const,
       createdAt: now,
       updatedAt: now
+    };
+    storage.writeDraftSpecSection(coreSpecSection);
+
+    // Save spawned features as draft
+    sprouted.features.forEach(feat => {
+      storage.writeDraftSpecSection(feat);
     });
 
-    // Save spawned features
+    // Commit specs from draft (since intake sprout already handles harness internally)
+    storage.commitDraftSpecSection('core_spec');
     sprouted.features.forEach(feat => {
-      storage.writeSpecSection(feat);
+      storage.commitDraftSpecSection(feat.id);
     });
+
 
     // 2. Propose decision cards if needed
     let decisions: any[] = [];
@@ -355,6 +367,16 @@ app.get('/api/project/gap-check', async (req, res) => {
   }
 });
 
+// 13.2. Local environment diagnostics
+app.get('/api/diagnostics', async (req, res) => {
+  try {
+    const report = await PlanningHarness.runDiagnostics();
+    res.json(report);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 13.5. Serve design mockup HTML for preview during planning phase
 app.get('/api/project/mockup', (req, res) => {
   try {
@@ -370,6 +392,14 @@ app.get('/api/project/mockup', (req, res) => {
 
 // 14. Chat SSE streaming responder
 app.get('/api/chat/stream', async (req, res) => {
+  const controller = new AbortController();
+  const signal = controller.signal;
+
+  req.on('close', () => {
+    console.log('[LAO Core] SSE Chat stream client closed request, aborting execution...');
+    controller.abort();
+  });
+
   try {
     const { message } = req.query;
     if (!message) {
@@ -387,6 +417,7 @@ app.get('/api/chat/stream', async (req, res) => {
 
     const messageStr = String(message);
     const now = new Date().toISOString();
+    const requestUuid = randomUUID().substring(0, 8);
 
     // Write user message to store
     const userMsg: NodeMessage = {
@@ -410,9 +441,18 @@ app.get('/api/chat/stream', async (req, res) => {
       chatHistory: messages.slice(0, -1),
       userMessage: messageStr,
       onChunk: (chunkEvent) => {
-        res.write(`data: ${JSON.stringify(chunkEvent)}\n\n`);
-      }
+        if (!signal.aborted) {
+          res.write(`data: ${JSON.stringify(chunkEvent)}\n\n`);
+        }
+      },
+      abortSignal: signal,
+      requestUuid
     });
+
+    if (signal.aborted) {
+      res.end();
+      return;
+    }
 
     // Write agent response to store
     const agentMsg: NodeMessage = {
@@ -424,40 +464,64 @@ app.get('/api/chat/stream', async (req, res) => {
     messages.push(agentMsg);
     storage.writeMessages(messages);
 
-    // Process spec update if returned
+    // Process spec update if returned (샌드박스 드래프트 스테이징 및 원자적 커밋)
     if (result.specUpdate) {
       const existing = sections.find(s => s.id === result.specUpdate!.sectionId);
       const updatedSection = {
         id: result.specUpdate.sectionId,
         title: result.specUpdate.title || (existing ? existing.title : 'Untitled Feature'),
         content: result.specUpdate.content,
-        status: existing ? existing.status : 'active',
+        status: (existing ? existing.status : 'active') as 'active' | 'deprecated',
         createdAt: existing ? existing.createdAt : now,
         updatedAt: now
       };
-      storage.writeSpecSection(updatedSection);
 
-      // Recompile
-      const recompiledSections = storage.readSpecs();
-      const md = SpecCompiler.compile(config, recompiledSections);
-      storage.writeCompiledSpec(md);
+      try {
+        // 1. 임시 드래프트 파일 작성 (요청 UUID 별 격리)
+        storage.writeDraftSpecSection(updatedSection, requestUuid);
+
+        if (!result.validationErrors) {
+          // 2. 검증 성공 시 정식 파일로 커밋 승격
+          storage.commitDraftSpecSection(updatedSection.id, requestUuid);
+
+          // Recompile
+          const recompiledSections = storage.readSpecs();
+          const md = SpecCompiler.compile(config, recompiledSections);
+          storage.writeCompiledSpec(md);
+        } else {
+          // 3. 검증 실패 시 드래프트 파일 롤백(제거)
+          console.warn('[LAO Core] specUpdate rejected due to validation failures:', result.validationErrors);
+          storage.rollbackDraftSpecSection(updatedSection.id, requestUuid);
+        }
+      } catch (writeErr) {
+        console.error('[LAO Core] Error writing/committing spec update:', writeErr);
+        try {
+          storage.rollbackDraftSpecSection(updatedSection.id, requestUuid);
+        } catch (cleanupErr) {
+          console.error('[LAO Core] Failed to cleanup draft file after exception:', cleanupErr);
+        }
+        throw writeErr;
+      }
     }
 
-    const shouldUpdateMockup = !!result.specUpdate || 
+    const shouldUpdateMockup = (!!result.specUpdate && !result.validationErrors) || 
       /디자인|스타일|테마|색상|ui|버튼|레이아웃|화면|미리보기|다크|화이트|폰트|글꼴|우선순위|mockup|preview|style|theme|color|dark|light/i.test(messageStr);
 
     if (shouldUpdateMockup) {
       // Write chunk to stream notifying of mockup generation
-      res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 변경된 기획안을 바탕으로 시안 미리보기를 업데이트하고 있습니다...)*' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'content', chunk: '\n\n*(AI가 5초의 스로틀 대기 후 변경된 기획안 시안 미리보기를 갱신합니다...)*' })}\n\n`);
       res.write(`data: ${JSON.stringify({ type: 'mockup_updating' })}\n\n`);
 
-      try {
-        const currentSections = storage.readSpecs();
-        await MockupGenerator.generateOrUpdate(PROJECT_ROOT, config, currentSections, messageStr);
-      } catch (err: any) {
-        console.error('[LAO Core] Mockup generation failed:', err);
-        res.write(`data: ${JSON.stringify({ type: 'content', chunk: `\n\n*(경고: 시안 미리보기 업데이트 실패: ${err.message})*` })}\n\n`);
-      }
+      if (mockupTimeout) clearTimeout(mockupTimeout);
+      mockupTimeout = setTimeout(async () => {
+        try {
+          const currentSections = storage.readSpecs();
+          await MockupGenerator.generateOrUpdate(PROJECT_ROOT, config, currentSections, messageStr);
+          console.log('[LAO Core] Mockup rendering updated after 5s debounce.');
+        } catch (err: any) {
+          console.error('[LAO Core] Mockup generation failed:', err);
+        }
+      }, 5000); // 5초 디바운싱(스로틀 가드)
     }
 
     // Send final completed payload
@@ -467,6 +531,7 @@ app.get('/api/chat/stream', async (req, res) => {
       reasoning: result.reasoning,
       prose: result.prose,
       specUpdate: result.specUpdate,
+      validationErrors: result.validationErrors, // 검증 에러 목록 전송
       messages,
       sections: storage.readSpecs()
     };
@@ -475,7 +540,9 @@ app.get('/api/chat/stream', async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error('Chat Stream API Error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    if (!signal.aborted) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    }
     res.end();
   }
 });
