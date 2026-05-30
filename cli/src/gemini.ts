@@ -179,6 +179,7 @@ export class GeminiClient {
     role?: 'director' | 'specifier' | 'researcher' | 'optionizer' | 'gapDetector' | 'mockup';
     nodeId?: string;
     onChunk?: (chunk: string) => void;
+    abortSignal?: AbortSignal;
   }): Promise<string> {
     let attempts = 0;
     const maxAttempts = 3;
@@ -248,6 +249,7 @@ export class GeminiClient {
     nodeId?: string;
     onChunk?: (chunk: string) => void;
     fallbackProvider?: string;
+    abortSignal?: AbortSignal;
   }): Promise<string> {
     let provider = params.fallbackProvider || this.defaultProvider;
     let model = params.model || this.defaultModel;
@@ -435,12 +437,26 @@ export class GeminiClient {
 
       // 5. 큐에 작업을 실어서 실행 (Concurrency 조절 및 좀비 해제)
       const executePromise = (taskRef: { setProcess: (proc: ChildProcess) => void }) => new Promise<string>((resolve, reject) => {
+        if (params.abortSignal?.aborted) {
+          reject(new Error('Aborted'));
+          return;
+        }
+
         const child = spawn(shell, [...shellArgs, command], {
           cwd: process.cwd(),
           env,
         });
 
         taskRef.setProcess(child);
+
+        const onAbort = () => {
+          child.kill('SIGKILL');
+          reject(new Error('Aborted'));
+        };
+
+        if (params.abortSignal) {
+          params.abortSignal.addEventListener('abort', onAbort);
+        }
 
         if (params.nodeId) {
           activeProcesses.set(params.nodeId, child);
@@ -466,6 +482,10 @@ export class GeminiClient {
         }
 
         child.on('close', (code) => {
+          if (params.abortSignal) {
+            params.abortSignal.removeEventListener('abort', onAbort);
+          }
+
           if (params.nodeId) {
             activeProcesses.delete(params.nodeId);
           }
@@ -482,6 +502,10 @@ export class GeminiClient {
         });
 
         child.on('error', (err) => {
+          if (params.abortSignal) {
+            params.abortSignal.removeEventListener('abort', onAbort);
+          }
+
           if (params.nodeId) {
             activeProcesses.delete(params.nodeId);
           }
@@ -509,6 +533,9 @@ export class GeminiClient {
       return output;
 
     } catch (error: any) {
+      if (error.message === 'Aborted') {
+        throw error;
+      }
       const exitCode = error.code || -1;
       const stderr = error.stderr || '';
       const stdout = error.stdout || '';

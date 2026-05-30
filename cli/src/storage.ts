@@ -189,7 +189,7 @@ export class StorageManager {
 
     // 2. Read feature markdown files
     if (fs.existsSync(this.featuresDirPath)) {
-      const files = fs.readdirSync(this.featuresDirPath);
+      const files = fs.readdirSync(this.featuresDirPath).sort();
       for (const file of files) {
         if (file.endsWith('.md')) {
           const filePath = path.join(this.featuresDirPath, file);
@@ -231,9 +231,9 @@ export class StorageManager {
   }
 
   /**
-   * Writes a spec section as a draft file (.md.draft)
+   * Writes a spec section as a draft file (.md.draft or .md.draft.uuid)
    */
-  public writeDraftSpecSection(section: SpecSection): void {
+  public writeDraftSpecSection(section: SpecSection, uuid?: string): void {
     const metadata = {
       id: section.id,
       title: section.title,
@@ -242,21 +242,23 @@ export class StorageManager {
       updatedAt: new Date().toISOString(),
     };
     const content = this.stringifyFrontmatter(metadata, section.content);
+    const suffix = uuid ? `.draft.${uuid}` : '.draft';
     
     if (section.id === 'core_spec') {
-      fs.writeFileSync(path.join(this.specsDirPath, 'core_spec.md.draft'), content, 'utf8');
+      fs.writeFileSync(path.join(this.specsDirPath, `core_spec.md${suffix}`), content, 'utf8');
     } else {
-      fs.writeFileSync(path.join(this.featuresDirPath, `${section.id}.md.draft`), content, 'utf8');
+      fs.writeFileSync(path.join(this.featuresDirPath, `${section.id}.md${suffix}`), content, 'utf8');
     }
   }
 
   /**
    * Commits a draft section by renaming it to the final spec file
    */
-  public commitDraftSpecSection(id: string): void {
+  public commitDraftSpecSection(id: string, uuid?: string): void {
+    const suffix = uuid ? `.draft.${uuid}` : '.draft';
     const draftPath = id === 'core_spec'
-      ? path.join(this.specsDirPath, 'core_spec.md.draft')
-      : path.join(this.featuresDirPath, `${id}.md.draft`);
+      ? path.join(this.specsDirPath, `core_spec.md${suffix}`)
+      : path.join(this.featuresDirPath, `${id}.md${suffix}`);
     const finalPath = id === 'core_spec'
       ? path.join(this.specsDirPath, 'core_spec.md')
       : path.join(this.featuresDirPath, `${id}.md`);
@@ -269,10 +271,11 @@ export class StorageManager {
   /**
    * Rolls back a draft spec file by unlinking it
    */
-  public rollbackDraftSpecSection(id: string): void {
+  public rollbackDraftSpecSection(id: string, uuid?: string): void {
+    const suffix = uuid ? `.draft.${uuid}` : '.draft';
     const draftPath = id === 'core_spec'
-      ? path.join(this.specsDirPath, 'core_spec.md.draft')
-      : path.join(this.featuresDirPath, `${id}.md.draft`);
+      ? path.join(this.specsDirPath, `core_spec.md${suffix}`)
+      : path.join(this.featuresDirPath, `${id}.md${suffix}`);
     
     if (fs.existsSync(draftPath)) {
       try {
@@ -284,7 +287,7 @@ export class StorageManager {
   }
 
   /**
-   * Delete or archive a feature specification file
+   * Deletes a feature spec section
    */
   public deleteSpecSection(id: string): void {
     if (id === 'core_spec') return; // Cannot delete core spec

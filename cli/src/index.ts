@@ -392,6 +392,14 @@ app.get('/api/project/mockup', (req, res) => {
 
 // 14. Chat SSE streaming responder
 app.get('/api/chat/stream', async (req, res) => {
+  const controller = new AbortController();
+  const signal = controller.signal;
+
+  req.on('close', () => {
+    console.log('[LAO Core] SSE Chat stream client closed request, aborting execution...');
+    controller.abort();
+  });
+
   try {
     const { message } = req.query;
     if (!message) {
@@ -409,6 +417,7 @@ app.get('/api/chat/stream', async (req, res) => {
 
     const messageStr = String(message);
     const now = new Date().toISOString();
+    const requestUuid = randomUUID().substring(0, 8);
 
     // Write user message to store
     const userMsg: NodeMessage = {
@@ -432,9 +441,18 @@ app.get('/api/chat/stream', async (req, res) => {
       chatHistory: messages.slice(0, -1),
       userMessage: messageStr,
       onChunk: (chunkEvent) => {
-        res.write(`data: ${JSON.stringify(chunkEvent)}\n\n`);
-      }
+        if (!signal.aborted) {
+          res.write(`data: ${JSON.stringify(chunkEvent)}\n\n`);
+        }
+      },
+      abortSignal: signal,
+      requestUuid
     });
+
+    if (signal.aborted) {
+      res.end();
+      return;
+    }
 
     // Write agent response to store
     const agentMsg: NodeMessage = {
@@ -458,24 +476,33 @@ app.get('/api/chat/stream', async (req, res) => {
         updatedAt: now
       };
 
-      // 1. 임시 드래프트 파일 작성
-      storage.writeDraftSpecSection(updatedSection);
+      try {
+        // 1. 임시 드래프트 파일 작성 (요청 UUID 별 격리)
+        storage.writeDraftSpecSection(updatedSection, requestUuid);
 
-      if (!result.validationErrors) {
-        // 2. 검증 성공 시 정식 파일로 커밋 승격
-        storage.commitDraftSpecSection(updatedSection.id);
+        if (!result.validationErrors) {
+          // 2. 검증 성공 시 정식 파일로 커밋 승격
+          storage.commitDraftSpecSection(updatedSection.id, requestUuid);
 
-        // Recompile
-        const recompiledSections = storage.readSpecs();
-        const md = SpecCompiler.compile(config, recompiledSections);
-        storage.writeCompiledSpec(md);
-      } else {
-        // 3. 검증 실패 시 드래프트 파일 롤백(제거)
-        console.warn('[LAO Core] specUpdate rejected due to validation failures:', result.validationErrors);
-        storage.rollbackDraftSpecSection(updatedSection.id);
+          // Recompile
+          const recompiledSections = storage.readSpecs();
+          const md = SpecCompiler.compile(config, recompiledSections);
+          storage.writeCompiledSpec(md);
+        } else {
+          // 3. 검증 실패 시 드래프트 파일 롤백(제거)
+          console.warn('[LAO Core] specUpdate rejected due to validation failures:', result.validationErrors);
+          storage.rollbackDraftSpecSection(updatedSection.id, requestUuid);
+        }
+      } catch (writeErr) {
+        console.error('[LAO Core] Error writing/committing spec update:', writeErr);
+        try {
+          storage.rollbackDraftSpecSection(updatedSection.id, requestUuid);
+        } catch (cleanupErr) {
+          console.error('[LAO Core] Failed to cleanup draft file after exception:', cleanupErr);
+        }
+        throw writeErr;
       }
     }
-
 
     const shouldUpdateMockup = (!!result.specUpdate && !result.validationErrors) || 
       /디자인|스타일|테마|색상|ui|버튼|레이아웃|화면|미리보기|다크|화이트|폰트|글꼴|우선순위|mockup|preview|style|theme|color|dark|light/i.test(messageStr);
@@ -513,7 +540,9 @@ app.get('/api/chat/stream', async (req, res) => {
     res.end();
   } catch (error: any) {
     console.error('Chat Stream API Error:', error);
-    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    if (!signal.aborted) {
+      res.write(`data: ${JSON.stringify({ type: 'error', error: error.message })}\n\n`);
+    }
     res.end();
   }
 });
