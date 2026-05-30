@@ -18,7 +18,7 @@ The handoff workflow operates as follows:
    * **Monospace Log Viewer**: Real-time rendering of the compiled specification.
    * **Copy**: Copy the complete specification to your clipboard.
    * **Download**: Save `spec_compiled.md` locally to your machine.
-3. **AI Intake** — Developers feed the compiled `spec_compiled.md` file or its copied contents directly into their preferred CLI coding agents (Claude Code, Codex, etc.) as prompt context.
+3. **AI Intake** — Developers feed the compiled `spec_compiled.md` file directly into preferred CLI coding agents. LAO v0.9.3 facilitates this by incorporating environment diagnostics (`runDiagnostics`) to ensure credentials and CLI commands are fully functional before execution.
 
 ---
 
